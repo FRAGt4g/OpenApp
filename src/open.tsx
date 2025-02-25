@@ -16,7 +16,6 @@ import { readdirSync } from "fs";
 import { useEffect, useMemo, useState } from "react";
 import { promisify } from "util";
 import RenameItem from "./RenameItem";
-import SetQuickCommand from "./SetQuickCommand";
 
 interface AppPreferences {
   hidden: string[];
@@ -167,16 +166,6 @@ export default function Command() {
     await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
   }
 
-  async function handleSetQuickCommand(
-    app: Application,
-    command: { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent },
-  ) {
-    const newPreferences = { ...preferences };
-    newPreferences.quickCommands[app.bundleId ?? ""] = command;
-    setPreferences(newPreferences);
-    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-  }
-
   function updateRunningStatus(app: Application, running: boolean) {
     const newApplications: Application[] = applications.map((a) => {
       if (a.bundleId === app.bundleId) {
@@ -274,19 +263,6 @@ export default function Command() {
                   )
                 }
                 shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
-              />
-              <Action
-                title="Set Quick Command"
-                icon={Icon.CommandSymbol}
-                onAction={() =>
-                  push(
-                    <SetQuickCommand
-                      item={{ id: app.bundleId ?? "", name: app.name }}
-                      onSetQuickCommand={(command) => handleSetQuickCommand(app, command)}
-                    />,
-                  )
-                }
-                shortcut={{ modifiers: ["cmd", "shift"], key: "," }}
               />
             </ActionPanel.Section>
             <ActionPanel.Section title={"General View"}>
