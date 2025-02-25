@@ -5,7 +5,6 @@ import {
   getApplications,
   getPreferenceValues,
   Icon,
-  Keyboard,
   List,
   LocalStorage,
   Application as RayCastApplication,
@@ -13,51 +12,23 @@ import {
   Toast,
   useNavigation,
 } from "@raycast/api";
-import { exec } from "child_process";
-import { readdirSync } from "fs";
 import { useEffect, useMemo, useState } from "react";
-import { promisify } from "util";
-import RenameItem from "./RenameItem";
-
-interface AppPreferences {
-  hidden: string[];
-  customNames: Record<string, string>;
-  pinnedApps: string[];
-  appImportance: Record<string, number>;
-  showHidden: boolean;
-  quickCommands: Record<string, { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent }>;
-  prioritizeRunningApps: boolean;
-  sortType: "frecency" | "alphabetical" | "custom";
-  appsWithoutRunningCheck: string[];
-}
-
-interface HitHistory {
-  [key: string]: string[];
-}
-
-interface Application {
-  bundleId: string;
-  name: string;
-  path: string;
-  running: boolean;
-}
-
-const execPromise = promisify(exec);
-
-function getAppIcon(app: Application): string | Icon {
-  if (!app?.path) return "";
-
-  const resourcesPath = `${app.path}/Contents/Resources`;
-  try {
-    const iconFile = readdirSync(resourcesPath).find((file) => file.endsWith(".icns"));
-    return iconFile ? `${resourcesPath}/${iconFile}` : Icon.AppWindow;
-  } catch {
-    return Icon.AppWindow;
-  }
-}
+import {
+  Application,
+  AppPreferences,
+  getAppIcon,
+  HitHistory,
+  RenameItem,
+  runTerminalCommand,
+  ToggleableAppPreferences,
+} from "./imports";
 
 export default function Command() {
-  const { fastMode, lambdaDecayString } = getPreferenceValues<{ fastMode: boolean; lambdaDecayString: string }>();
+  const { fastMode, lambdaDecayString, showSortOptions } = getPreferenceValues<{
+    fastMode: boolean;
+    lambdaDecayString: string;
+    showSortOptions: boolean;
+  }>();
   const lambdaDecay = parseFloat(lambdaDecayString);
   const [applications, setApplications] = useState<Application[]>([]);
   const [preferences, setPreferences] = useState<AppPreferences>({
@@ -163,7 +134,7 @@ export default function Command() {
 
     async function getRunningApps(): Promise<string[]> {
       try {
-        const { stdout } = await execPromise("ps aux | grep -i '.app'");
+        const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
         const runningApps = stdout
           .split("\n")
           .filter(
@@ -211,7 +182,7 @@ export default function Command() {
     ];
   }, [applications, preferences, sortType]);
 
-  function frecency(appId: string) {
+  function calcFrecencyValue(appId: string) {
     const now = new Date();
     return (
       hitHistory[appId]?.reduce((total, timestamp) => {
@@ -224,15 +195,13 @@ export default function Command() {
   }
 
   function sortFunction(a: Application, b: Application) {
-    if (preferences.prioritizeRunningApps) {
-      if (a.running && !b.running) return -1;
-      if (!a.running && b.running) return 1;
+    if (preferences.prioritizeRunningApps && a.running !== b.running) {
+      return a.running ? -1 : 1;
     }
 
     switch (sortType) {
-      case "frecency": {
-        return frecency(b.bundleId) - frecency(a.bundleId);
-      }
+      case "frecency":
+        return calcFrecencyValue(b.bundleId) - calcFrecencyValue(a.bundleId);
       case "alphabetical":
         return a.name.localeCompare(b.name);
       case "custom":
@@ -240,10 +209,7 @@ export default function Command() {
     }
   }
 
-  async function toggle(
-    type: "pinnedApps" | "hidden" | "appsWithoutRunningCheck" | "prioritizeRunningApps" | "showHidden",
-    bundleId: string,
-  ) {
+  async function toggle(type: ToggleableAppPreferences, bundleId: string) {
     const newPreferences = { ...preferences };
     switch (type) {
       case "pinnedApps":
@@ -265,10 +231,10 @@ export default function Command() {
           newPreferences.appsWithoutRunningCheck = newPreferences.appsWithoutRunningCheck.filter(
             (id) => id !== bundleId,
           );
-          updateRunningStatus(applications.find((app) => app.bundleId === bundleId)!, true, true);
+          setAppRunningStatus(applications.find((app) => app.bundleId === bundleId)!, true);
         } else {
           newPreferences.appsWithoutRunningCheck.push(bundleId);
-          updateRunningStatus(applications.find((app) => app.bundleId === bundleId)!, false, true);
+          setAppRunningStatus(applications.find((app) => app.bundleId === bundleId)!, false);
         }
         break;
       case "prioritizeRunningApps":
@@ -282,47 +248,17 @@ export default function Command() {
     await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
   }
 
-  async function setCustomName(bundleId: string, name: string) {
-    const newPreferences = { ...preferences };
-    newPreferences.customNames[bundleId] = name.replace(
-      /\w\S*/g,
-      (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase(),
-    );
-    setPreferences(newPreferences);
-    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-  }
-
-  function updateRunningStatus(app: Application, running: boolean, force: boolean = false) {
+  function setAppRunningStatus(app: Application, running: boolean) {
     const newApplications: Application[] = applications.map((a) => {
       if (a.bundleId === app.bundleId) {
-        return { ...a, running: running && (force || !preferences.appsWithoutRunningCheck.includes(a.bundleId)) };
+        return { ...a, running: running };
       }
       return a;
     });
     setApplications(newApplications);
   }
 
-  function onAppOpen(app: Application) {
-    updateRunningStatus(app, true);
-    incrementImportance(app);
-  }
-
-  async function closeApp(app: Application) {
-    updateRunningStatus(app, false);
-    try {
-      setIsLoading(true);
-      await execPromise(`osascript -e 'tell application "${app.name}" to quit'`);
-      setIsLoading(false);
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to close application",
-        message: String(error),
-      });
-    }
-  }
-
-  function incrementImportance(app: Application) {
+  function incrementFrecency(app: Application) {
     const newHitHistory = { ...hitHistory };
     newHitHistory[app.bundleId] = (newHitHistory[app.bundleId] ?? []).concat([new Date().toISOString()]);
     setHitHistory(newHitHistory);
@@ -348,13 +284,29 @@ export default function Command() {
               title={app.running ? "Go to Application" : "Open Application"}
               target={app.path}
               icon={Icon.AppWindow}
-              onOpen={() => onAppOpen(app)}
+              onOpen={() => {
+                setAppRunningStatus(app, true);
+                incrementFrecency(app);
+              }}
             />
             {app.running && (
               <Action
                 title="Close Application"
                 icon={Icon.XMarkCircle}
-                onAction={() => closeApp(app)}
+                onAction={async () => {
+                  setAppRunningStatus(app, false);
+                  try {
+                    setIsLoading(true);
+                    await runTerminalCommand(`osascript -e 'tell application "${app.name}" to quit'`);
+                    setIsLoading(false);
+                  } catch (error) {
+                    await showToast({
+                      style: Toast.Style.Failure,
+                      title: "Failed to close application",
+                      message: String(error),
+                    });
+                  }
+                }}
                 shortcut={{ modifiers: ["ctrl"], key: "x" }}
               />
             )}
@@ -380,7 +332,12 @@ export default function Command() {
                   push(
                     <RenameItem
                       item={{ id: app.bundleId ?? "", name: app.name }}
-                      onRename={(name) => setCustomName(app.bundleId ?? "", name)}
+                      onRename={async (name) => {
+                        const newPreferences = { ...preferences };
+                        newPreferences.customNames[app.bundleId] = name;
+                        setPreferences(newPreferences);
+                        await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                      }}
                     />,
                   )
                 }
@@ -417,26 +374,28 @@ export default function Command() {
     );
   };
 
+  const searchBarAccessory = showSortOptions ? (
+    <List.Dropdown
+      tooltip="Sort by"
+      onChange={(value) => {
+        const newSortType = value as "frecency" | "alphabetical" | "custom";
+        setSortType(newSortType);
+        LocalStorage.setItem("sortType", newSortType);
+      }}
+    >
+      <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
+      <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
+      <List.Dropdown.Item title="Custom" value="custom" icon={Icon.Pencil} />
+    </List.Dropdown>
+  ) : null;
+
   return (
     <List
       isLoading={isLoading}
       filtering={{
         keepSectionOrder: true,
       }}
-      searchBarAccessory={
-        <List.Dropdown
-          tooltip="Sort by"
-          onChange={(value) => {
-            const newSortType = value as "frecency" | "alphabetical" | "custom";
-            setSortType(newSortType);
-            LocalStorage.setItem("sortType", newSortType);
-          }}
-        >
-          <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
-          <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
-          <List.Dropdown.Item title="Custom" value="custom" icon={Icon.Pencil} />
-        </List.Dropdown>
-      }
+      searchBarAccessory={searchBarAccessory}
     >
       <List.Section title="Pinned Apps">
         {pinnedApps.map((app) => (

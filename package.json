@@ -55,6 +55,15 @@
       "type": "textfield",
       "default": "10",
       "required": true
+    },
+    {
+      "name": "showSortOptions",
+      "label": "Whether or not to show the sort options",
+      "title": "Show Sort Options",
+      "description": "Show the sort options in the search bar",
+      "type": "checkbox",
+      "default": true,
+      "required": false
     }
   ]
 }
