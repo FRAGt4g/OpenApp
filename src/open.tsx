@@ -25,15 +25,14 @@ import {
 } from "./imports";
 
 export default function Command() {
-  const { fastMode, lambdaDecayString, showSortOptions, fuzzySearchThresholdString } = getPreferenceValues<{
-    fastMode: boolean;
-    lambdaDecayString: string;
-    showSortOptions: boolean;
-    fuzzySearchThresholdString: string;
-  }>();
-  const lambdaDecay = parseFloat(lambdaDecayString);
-  const fuzzySearchThreshold = parseFloat(fuzzySearchThresholdString);
-  const [applications, setApplications] = useState<Application[]>([]);
+  const { fastMode, showSortOptions, lambdaDecayDropdown, fuzzySearchThresholdDropdown, timeScaleDropdown } =
+    getPreferenceValues<{
+      fastMode: boolean;
+      showSortOptions: boolean;
+      lambdaDecayDropdown: string;
+      fuzzySearchThresholdDropdown: string;
+      timeScaleDropdown: string;
+    }>();
   const [preferences, setPreferences] = useState<AppPreferences>({
     hidden: [],
     customNames: {},
@@ -45,11 +44,15 @@ export default function Command() {
     sortType: "frecency",
     appsWithoutRunningCheck: [],
   });
+  const lambdaDecay = parseFloat(lambdaDecayDropdown);
+  const fuzzySearchThreshold = parseFloat(fuzzySearchThresholdDropdown);
+  const timeScale = parseFloat(timeScaleDropdown);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [hitHistory, setHitHistory] = useState<HitHistory>({});
   const [isLoading, setIsLoading] = useState(true);
   const [sortType, setSortType] = useState<"frecency" | "alphabetical" | "custom">("frecency");
-  const { push } = useNavigation();
   const [searchText, setSearchText] = useState("");
+  const { push } = useNavigation();
 
   useEffect(() => {
     async function loadPreferences(): Promise<AppPreferences> {
@@ -216,9 +219,11 @@ export default function Command() {
     const now = new Date();
     return (
       hitHistory[appId]?.reduce((total, timestamp) => {
+        const millisecondsToHours = 3600000;
         return (
           // Measured in 6 hours increments
-          total + Math.exp(-lambdaDecay * ((now.getTime() - new Date(timestamp).getTime()) / 3600000 / 6))
+          total +
+          Math.exp(-lambdaDecay * ((now.getTime() - new Date(timestamp).getTime()) / millisecondsToHours / timeScale))
         );
       }, 0) ?? 0
     );

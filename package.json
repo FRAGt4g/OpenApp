@@ -59,20 +59,142 @@
       "required": false
     },
     {
-      "name": "lambdaDecayString",
-      "title": "Frecency Decay Rate",
-      "description": "The decay rate for the frecency algorithm (Default 10)",
-      "type": "textfield",
-      "default": "10",
-      "required": false
+      "name": "timeScaleDropdown",
+      "title": "Time Scale For Frecency",
+      "description": "The time scale for the frecency algorithm",
+      "type": "dropdown",
+      "default": "6",
+      "required": false,
+      "data": [
+        {
+          "title": "30 minutes",
+          "value": "0.5"
+        },
+        {
+          "title": "1 hour",
+          "value": "1"
+        },
+        {
+          "title": "3 hours",
+          "value": "3"
+        },
+        {
+          "title": "6 hours",
+          "value": "6"
+        },
+        {
+          "title": "12 hours",
+          "value": "12"
+        },
+        {
+          "title": "1 day",
+          "value": "24"
+        },
+        {
+          "title": "2 days",
+          "value": "48"
+        },
+        {
+          "title": "1 week",
+          "value": "168"
+        }
+      ]
     },
     {
-      "name": "fuzzySearchThresholdString",
+      "name": "lambdaDecayDropdown",
+      "title": "Frecency Decay Rate",
+      "description": "The decay rate for the frecency algorithm",
+      "type": "dropdown",
+      "default": "10",
+      "required": false,
+      "data": [
+        {
+          "title": "1",
+          "value": "1"
+        },
+        {
+          "title": "2",
+          "value": "2"
+        },
+        {
+          "title": "3",
+          "value": "3"
+        },
+        {
+          "title": "5",
+          "value": "5"
+        },
+        {
+          "title": "7",
+          "value": "7"
+        },
+        {
+          "title": "10",
+          "value": "10"
+        },
+        {
+          "title": "15",
+          "value": "15"
+        },
+        {
+          "title": "20",
+          "value": "20"
+        },
+        {
+          "title": "30",
+          "value": "30"
+        }
+      ]
+    },
+    {
+      "name": "fuzzySearchThresholdDropdown",
       "title": "Fuzzy Search Threshold",
       "description": "Threshold for fuzzy search. From 0-1, default is 0.4. Lower is more strict",
-      "type": "textfield",
+      "type": "dropdown",
       "default": "0.4",
-      "required": false
+      "required": false,
+      "data": [
+        {
+          "title": "0.1",
+          "value": "0.1"
+        },
+        {
+          "title": "0.2",
+          "value": "0.2"
+        },
+        {
+          "title": "0.3",
+          "value": "0.3"
+        },
+        {
+          "title": "0.4",
+          "value": "0.4"
+        },
+        {
+          "title": "0.5",
+          "value": "0.5"
+        },
+        {
+          "title": "0.6",
+          "value": "0.6"
+        },
+        {
+          "title": "0.7",
+          "value": "0.7"
+        },
+        {
+          "title": "0.8",
+          "value": "0.8"
+        },
+        {
+          "title": "0.9",
+          "value": "0.9"
+        },
+        {
+          "title": "1",
+          "value": "1"
+        }
+      ]
     }
   ]
 }
