@@ -221,7 +221,6 @@ export default function Command() {
       hitHistory[appId]?.reduce((total, timestamp) => {
         const millisecondsToHours = 3600000;
         return (
-          // Measured in 6 hours increments
           total +
           Math.exp(-lambdaDecay * ((now.getTime() - new Date(timestamp).getTime()) / millisecondsToHours / timeScale))
         );
