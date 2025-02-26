@@ -20,7 +20,8 @@
   ],
   "dependencies": {
     "@raycast/api": "^1.92.1",
-    "@raycast/utils": "^1.17.0"
+    "@raycast/utils": "^1.17.0",
+    "fuse.js": "^7.1.0"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.11",
@@ -46,15 +47,7 @@
       "description": "Disable to speed up loading times by not gathering app icons and running status",
       "type": "checkbox",
       "default": false,
-      "required": true
-    },
-    {
-      "name": "lambdaDecayString",
-      "title": "Frecency Decay Rate",
-      "description": "The decay rate for the frecency algorithm (Default 10)",
-      "type": "textfield",
-      "default": "10",
-      "required": true
+      "required": false
     },
     {
       "name": "showSortOptions",
@@ -63,6 +56,22 @@
       "description": "Show the sort options in the search bar",
       "type": "checkbox",
       "default": true,
+      "required": false
+    },
+    {
+      "name": "lambdaDecayString",
+      "title": "Frecency Decay Rate",
+      "description": "The decay rate for the frecency algorithm (Default 10)",
+      "type": "textfield",
+      "default": "10",
+      "required": false
+    },
+    {
+      "name": "fuzzySearchThresholdString",
+      "title": "Fuzzy Search Threshold",
+      "description": "Threshold for fuzzy search. From 0-1, default is 0.4. Lower is more strict",
+      "type": "textfield",
+      "default": "0.4",
       "required": false
     }
   ]

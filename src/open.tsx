@@ -12,6 +12,7 @@ import {
   Toast,
   useNavigation,
 } from "@raycast/api";
+import Fuse from "fuse.js";
 import { useEffect, useMemo, useState } from "react";
 import {
   Application,
@@ -24,12 +25,14 @@ import {
 } from "./imports";
 
 export default function Command() {
-  const { fastMode, lambdaDecayString, showSortOptions } = getPreferenceValues<{
+  const { fastMode, lambdaDecayString, showSortOptions, fuzzySearchThresholdString } = getPreferenceValues<{
     fastMode: boolean;
     lambdaDecayString: string;
     showSortOptions: boolean;
+    fuzzySearchThresholdString: string;
   }>();
   const lambdaDecay = parseFloat(lambdaDecayString);
+  const fuzzySearchThreshold = parseFloat(fuzzySearchThresholdString);
   const [applications, setApplications] = useState<Application[]>([]);
   const [preferences, setPreferences] = useState<AppPreferences>({
     hidden: [],
@@ -46,6 +49,7 @@ export default function Command() {
   const [isLoading, setIsLoading] = useState(true);
   const [sortType, setSortType] = useState<"frecency" | "alphabetical" | "custom">("frecency");
   const { push } = useNavigation();
+  const [searchText, setSearchText] = useState("");
 
   useEffect(() => {
     async function loadPreferences(): Promise<AppPreferences> {
@@ -88,13 +92,8 @@ export default function Command() {
       runningApps: string[],
       preferences: AppPreferences,
     ): Application[] {
-      const specialAppNames: Record<string, string> = {
-        "System Settings": "Settings",
-      };
-
       const runningCheck = (app: RayCastApplication) => {
-        const name = specialAppNames[app.name] ?? app.name;
-        return runningApps.includes(name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!);
+        return runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!);
       };
 
       return apps
@@ -137,15 +136,18 @@ export default function Command() {
         const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
         const runningApps = stdout
           .split("\n")
-          .filter(
-            (line) =>
-              line.includes(".app") &&
-              line.includes("Applications/") &&
-              line.split(/\s+/).pop() !== undefined &&
-              line.split(/\s+/).pop()!.split("/").pop() !== undefined,
+          .filter((line) => line.includes(".app") && line.includes("Contents/MacOS/"))
+          .map((line) =>
+            line.substring(
+              line.indexOf("Applications/") + 13,
+              line.indexOf("/", line.indexOf("Applications/") + 13) - 4,
+            ),
           )
-          .map((line) => line.split(/\s+/).pop()!.split("/").pop()!)
-          .filter((app) => !app!.startsWith("--"));
+          .filter((app) => !app.includes("??"))
+          .filter((app, index, self) => self.indexOf(app) === index);
+        for (const app of runningApps) {
+          console.log(app);
+        }
 
         return runningApps;
       } catch (error) {
@@ -170,17 +172,45 @@ export default function Command() {
     fetchApplications();
   }, []);
 
+  function passesSearchFilter(app: Application): boolean {
+    if (!searchText) return true;
+
+    const options = {
+      includeScore: true,
+      threshold: fuzzySearchThreshold,
+      keys: [
+        { name: "name", weight: 0.3 },
+        { name: "customName", weight: 0.7 },
+      ],
+    };
+
+    const fuse = new Fuse(
+      [
+        {
+          name: app.name.toLowerCase(),
+          customName: (preferences.customNames[app.bundleId] || "").toLowerCase(),
+        },
+      ],
+      options,
+    );
+
+    const result = fuse.search(searchText.toLowerCase());
+    return result.length > 0;
+  }
+
   const [pinnedApps, regularApps, hiddenApps] = useMemo(() => {
     return [
-      applications.filter((app) => preferences.pinnedApps.includes(app.bundleId)).sort(sortFunction),
       applications
-        .filter((app) => !preferences.pinnedApps.includes(app.bundleId) && !preferences.hidden.includes(app.bundleId))
+        .filter((app) => preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app))
         .sort(sortFunction),
       applications
-        .filter((app) => preferences.showHidden && preferences.hidden.includes(app.bundleId))
+        .filter((app) => !preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app))
+        .sort(sortFunction),
+      applications
+        .filter((app) => preferences.showHidden && preferences.hidden.includes(app.bundleId) && passesSearchFilter(app))
         .sort(sortFunction),
     ];
-  }, [applications, preferences, sortType]);
+  }, [applications, preferences, sortType, searchText]);
 
   function calcFrecencyValue(appId: string) {
     const now = new Date();
@@ -359,6 +389,7 @@ export default function Command() {
                 title={preferences.showHidden ? "Hide All Hidden Apps" : "Show All Hidden Apps"}
                 icon={preferences.showHidden ? Icon.CircleDisabled : Icon.Circle}
                 onAction={() => toggle("showHidden", app.bundleId)}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "h" }}
               />
               <Action
                 title={
@@ -366,6 +397,7 @@ export default function Command() {
                 }
                 icon={preferences.prioritizeRunningApps ? Icon.BoltDisabled : Icon.Bolt}
                 onAction={() => toggle("prioritizeRunningApps", app.bundleId)}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
               />
             </ActionPanel.Section>
           </ActionPanel>
@@ -374,28 +406,28 @@ export default function Command() {
     );
   };
 
-  const searchBarAccessory = showSortOptions ? (
-    <List.Dropdown
-      tooltip="Sort by"
-      onChange={(value) => {
-        const newSortType = value as "frecency" | "alphabetical" | "custom";
-        setSortType(newSortType);
-        LocalStorage.setItem("sortType", newSortType);
-      }}
-    >
-      <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
-      <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
-      <List.Dropdown.Item title="Custom" value="custom" icon={Icon.Pencil} />
-    </List.Dropdown>
-  ) : null;
-
   return (
     <List
       isLoading={isLoading}
-      filtering={{
-        keepSectionOrder: true,
-      }}
-      searchBarAccessory={searchBarAccessory}
+      filtering={false}
+      onSearchTextChange={setSearchText}
+      searchBarPlaceholder="Search for the app you want to open"
+      searchBarAccessory={
+        showSortOptions ? (
+          <List.Dropdown
+            tooltip="Sort by"
+            onChange={(value) => {
+              const newSortType = value as "frecency" | "alphabetical" | "custom";
+              setSortType(newSortType);
+              LocalStorage.setItem("sortType", newSortType);
+            }}
+          >
+            <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
+            <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
+            <List.Dropdown.Item title="Custom" value="custom" icon={Icon.Pencil} />
+          </List.Dropdown>
+        ) : null
+      }
     >
       <List.Section title="Pinned Apps">
         {pinnedApps.map((app) => (

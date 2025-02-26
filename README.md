@@ -10,6 +10,8 @@ Open or move to an app
 
 ### General
 
-- [ ] Add option to not show running icon
+- [x] Add option to not show running icon
 - [x] Different sort options (alphabetical, frecency, custom, etc)
 - [ ] Include custom sorting order
+- [ ] Option to add website urls
+- [ ] Add reload action
