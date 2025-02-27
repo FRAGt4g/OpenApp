@@ -14,4 +14,4 @@ Open or move to an app
 - [x] Different sort options (alphabetical, frecency, custom, etc)
 - [ ] Include custom sorting order
 - [ ] Option to add website urls
-- [ ] Add reload action
+- [ ] Add resetting frecency values option

@@ -1,7 +1,9 @@
 import {
   Action,
   ActionPanel,
+  Alert,
   Color,
+  confirmAlert,
   getApplications,
   getPreferenceValues,
   Icon,
@@ -23,6 +25,10 @@ import {
   runTerminalCommand,
   ToggleableAppPreferences,
 } from "./imports";
+
+const DEBUG_MODE = true;
+const SEARCH_STRICTNESS = 0.4;
+const FARTHEST_BACK_HIT_DATE = 3600000 * 24 * 30; // 30 days
 
 export default function Command() {
   const { fastMode, showSortOptions, lambdaDecayDropdown, fuzzySearchThresholdDropdown, timeScaleDropdown } =
@@ -148,9 +154,6 @@ export default function Command() {
           )
           .filter((app) => !app.includes("??"))
           .filter((app, index, self) => self.indexOf(app) === index);
-        for (const app of runningApps) {
-          console.log(app);
-        }
 
         return runningApps;
       } catch (error) {
@@ -175,12 +178,13 @@ export default function Command() {
     fetchApplications();
   }, []);
 
-  function passesSearchFilter(app: Application): boolean {
-    if (!searchText) return true;
+  function passesSearchFilter(app: Application): { passes: boolean; score: number } {
+    if (!searchText) return { passes: true, score: 1 };
 
     const options = {
       includeScore: true,
-      threshold: fuzzySearchThreshold,
+      //TODO: Remove in production
+      threshold: DEBUG_MODE ? SEARCH_STRICTNESS : fuzzySearchThreshold,
       keys: [
         { name: "name", weight: 0.3 },
         { name: "customName", weight: 0.7 },
@@ -198,19 +202,26 @@ export default function Command() {
     );
 
     const result = fuse.search(searchText.toLowerCase());
-    return result.length > 0;
+    const score = result.length > 0 ? (result[0]!.score ?? 1) : 1;
+    return {
+      passes: result.length > 0,
+      score: 1 - score,
+    };
   }
 
   const [pinnedApps, regularApps, hiddenApps] = useMemo(() => {
     return [
       applications
-        .filter((app) => preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app))
+        .filter((app) => preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app).passes)
         .sort(sortFunction),
       applications
-        .filter((app) => !preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app))
+        .filter((app) => !preferences.pinnedApps.includes(app.bundleId) && passesSearchFilter(app).passes)
         .sort(sortFunction),
       applications
-        .filter((app) => preferences.showHidden && preferences.hidden.includes(app.bundleId) && passesSearchFilter(app))
+        .filter(
+          (app) =>
+            preferences.showHidden && preferences.hidden.includes(app.bundleId) && passesSearchFilter(app).passes,
+        )
         .sort(sortFunction),
     ];
   }, [applications, preferences, sortType, searchText]);
@@ -235,7 +246,10 @@ export default function Command() {
 
     switch (sortType) {
       case "frecency":
-        return calcFrecencyValue(b.bundleId) - calcFrecencyValue(a.bundleId);
+        return (
+          (calcFrecencyValue(b.bundleId) - calcFrecencyValue(a.bundleId)) * 0.75 +
+          (passesSearchFilter(b).score - passesSearchFilter(a).score) * 0.25
+        );
       case "alphabetical":
         return a.name.localeCompare(b.name);
       case "custom":
@@ -311,6 +325,14 @@ export default function Command() {
             icon: app.running ? { source: Icon.Bolt, tintColor: Color.Green } : undefined,
             tooltip: app.running ? "Running" : "Not Running",
           },
+          {
+            icon: DEBUG_MODE ? { source: Icon.Clock, tintColor: Color.Blue } : undefined,
+            tooltip: DEBUG_MODE ? `Frecency Score: ${calcFrecencyValue(app.bundleId)}` : undefined,
+          },
+          {
+            icon: DEBUG_MODE ? { source: Icon.Text, tintColor: Color.Orange } : undefined,
+            tooltip: DEBUG_MODE ? `Search Score: ${passesSearchFilter(app).score}` : undefined,
+          },
         ]}
         actions={
           <ActionPanel>
@@ -377,6 +399,18 @@ export default function Command() {
                 }
                 shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
               />
+              {preferences.customNames[app.bundleId] && (
+                <Action
+                  title="Remove Custom Name"
+                  icon={Icon.XMarkCircle}
+                  onAction={async () => {
+                    const newPreferences = { ...preferences };
+                    delete newPreferences.customNames[app.bundleId];
+                    setPreferences(newPreferences);
+                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                  }}
+                />
+              )}
               <Action
                 title={
                   preferences.appsWithoutRunningCheck.includes(app.bundleId)
@@ -388,7 +422,7 @@ export default function Command() {
                 shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
               />
             </ActionPanel.Section>
-            <ActionPanel.Section title={"General View"}>
+            <ActionPanel.Section title={"General"}>
               <Action
                 title={preferences.showHidden ? "Hide All Hidden Apps" : "Show All Hidden Apps"}
                 icon={preferences.showHidden ? Icon.CircleDisabled : Icon.Circle}
@@ -402,6 +436,34 @@ export default function Command() {
                 icon={preferences.prioritizeRunningApps ? Icon.BoltDisabled : Icon.Bolt}
                 onAction={() => toggle("prioritizeRunningApps", app.bundleId)}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+              />
+              <Action
+                title="Reset Frecency Values"
+                icon={Icon.Clock}
+                onAction={async () => {
+                  if (
+                    await confirmAlert({
+                      title: "Are you sure?",
+                      message:
+                        "This will reset all frecency values which will affect the sorting of apps. This cannot be undone.",
+                      primaryAction: {
+                        title: "Reset",
+                        style: Alert.ActionStyle.Destructive,
+                      },
+                      dismissAction: {
+                        title: "Cancel",
+                        style: Alert.ActionStyle.Cancel,
+                      },
+                    })
+                  ) {
+                    setHitHistory({});
+                    LocalStorage.setItem("hitHistory", JSON.stringify({}));
+                    showToast({
+                      style: Toast.Style.Success,
+                      title: "Frecency values reset",
+                    });
+                  }
+                }}
               />
             </ActionPanel.Section>
           </ActionPanel>

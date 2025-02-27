@@ -1,13 +1,16 @@
-import { Action, ActionPanel, Form, popToRoot, showHUD } from "@raycast/api";
+import { Action, ActionPanel, Form, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
 
 export default function RenameItem(props: { item: { id: string; name: string }; onRename: (newName: string) => void }) {
   const [name, setName] = useState(props.item.name);
-
+  const { pop } = useNavigation();
   function handleSubmit() {
     props.onRename(name);
-    showHUD("Item renamed!");
-    popToRoot(); // Closes the form
+    showToast({
+      style: Toast.Style.Success,
+      title: `${props.item.name} renamed to ${name}!`,
+    });
+    pop();
   }
 
   return (
