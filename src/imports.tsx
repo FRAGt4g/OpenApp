@@ -51,5 +51,24 @@ interface Application {
   running: boolean;
 }
 
-export { RenameItem };
+async function getRunningApps(): Promise<string[]> {
+  try {
+    const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
+    const runningApps = stdout
+      .split("\n")
+      .filter((line) => line.includes(".app") && line.includes("Contents/MacOS/"))
+      .map((line) =>
+        line.substring(line.indexOf("Applications/") + 13, line.indexOf("/", line.indexOf("Applications/") + 13) - 4),
+      )
+      .filter((app) => !app.includes("??"))
+      .filter((app, index, self) => self.indexOf(app) === index);
+
+    return runningApps;
+  } catch (error) {
+    console.error("Error fetching running applications:", error);
+    return [];
+  }
+}
+
+export { getRunningApps, RenameItem };
 export type { Application, AppPreferences, HitHistory, ToggleableAppPreferences };

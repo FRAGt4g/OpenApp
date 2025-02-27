@@ -9,7 +9,6 @@ import {
   Icon,
   List,
   LocalStorage,
-  Application as RayCastApplication,
   showToast,
   Toast,
   useNavigation,
@@ -20,6 +19,7 @@ import {
   Application,
   AppPreferences,
   getAppIcon,
+  getRunningApps,
   HitHistory,
   RenameItem,
   runTerminalCommand,
@@ -27,8 +27,8 @@ import {
 } from "./imports";
 
 const DEBUG_MODE = true;
-const SEARCH_STRICTNESS = 0.4;
-const FARTHEST_BACK_HIT_DATE = 3600000 * 24 * 30; // 30 days
+const SEARCH_STRICTNESS = 0.35;
+const FARTHEST_BACK_HIT_DATE = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 export default function Command() {
   const { fastMode, showSortOptions, lambdaDecayDropdown, fuzzySearchThresholdDropdown, timeScaleDropdown } =
@@ -61,29 +61,42 @@ export default function Command() {
   const { push } = useNavigation();
 
   useEffect(() => {
-    async function loadPreferences(): Promise<AppPreferences> {
-      try {
-        const stored = await LocalStorage.getItem<string>("appPreferences");
-        if (stored) {
-          const parsedPreferences = JSON.parse(stored);
-          const soonToBePreferences = {
-            hidden: parsedPreferences.hidden ?? [],
-            customNames: parsedPreferences.customNames ?? {},
-            pinnedApps: parsedPreferences.pinnedApps ?? [],
-            appImportance: parsedPreferences.appImportance ?? {},
-            showHidden: parsedPreferences.showHidden ?? false,
-            quickCommands: parsedPreferences.quickCommands ?? {},
-            prioritizeRunningApps: parsedPreferences.prioritizeRunningApps ?? true,
-            sortType: parsedPreferences.sortType ?? "frecency",
-            appsWithoutRunningCheck: parsedPreferences.appsWithoutRunningCheck ?? [],
-          };
-          setPreferences(soonToBePreferences);
-          return soonToBePreferences;
+    async function initApp() {
+      const [unparsedHitHistoryJSON, unparsedPreferencesJSON, apps] = await Promise.all([
+        LocalStorage.getItem<string>("hitHistory"),
+        LocalStorage.getItem<string>("appPreferences"),
+        getApplications(),
+      ]);
+
+      if (unparsedHitHistoryJSON) {
+        try {
+          const parsedHitHistory: HitHistory = JSON.parse(unparsedHitHistoryJSON);
+          const cutoff = new Date(new Date().getTime() - FARTHEST_BACK_HIT_DATE);
+          console.log("--------------------------");
+          console.log("Cleaning hit history", parsedHitHistory);
+          console.log("Cutoff", cutoff);
+
+          const purgedHitHistory: HitHistory = {};
+          for (const hitHistoryItem of Object.entries(parsedHitHistory)) {
+            const [appId, timestamps] = hitHistoryItem;
+            const newTimestamps = timestamps.filter((timestamp) => new Date(timestamp) > cutoff);
+            if (newTimestamps.length > 0) {
+              purgedHitHistory[appId] = newTimestamps;
+            }
+          }
+
+          console.log("New hit history", purgedHitHistory);
+          LocalStorage.setItem("hitHistory", JSON.stringify(purgedHitHistory));
+          setHitHistory(purgedHitHistory);
+          console.log("--------------------------");
+        } catch (error) {
+          console.error("Error loading hit history:", error);
         }
-      } catch (error) {
-        console.error("Error loading preferences:", error);
+      } else {
+        setHitHistory({});
       }
-      return {
+
+      let soonToBePreferences: AppPreferences = {
         hidden: [],
         customNames: {},
         pinnedApps: [],
@@ -94,88 +107,47 @@ export default function Command() {
         sortType: "frecency",
         appsWithoutRunningCheck: [],
       };
-    }
+      if (unparsedPreferencesJSON) {
+        try {
+          const parsedPreferences = JSON.parse(unparsedPreferencesJSON);
+          soonToBePreferences = {
+            hidden: parsedPreferences.hidden ?? soonToBePreferences.hidden,
+            customNames: parsedPreferences.customNames ?? soonToBePreferences.customNames,
+            pinnedApps: parsedPreferences.pinnedApps ?? soonToBePreferences.pinnedApps,
+            appImportance: parsedPreferences.appImportance ?? soonToBePreferences.appImportance,
+            showHidden: parsedPreferences.showHidden ?? soonToBePreferences.showHidden,
+            quickCommands: parsedPreferences.quickCommands ?? soonToBePreferences.quickCommands,
+            prioritizeRunningApps: parsedPreferences.prioritizeRunningApps ?? soonToBePreferences.prioritizeRunningApps,
+            sortType: parsedPreferences.sortType ?? soonToBePreferences.sortType,
+            appsWithoutRunningCheck:
+              parsedPreferences.appsWithoutRunningCheck ?? soonToBePreferences.appsWithoutRunningCheck,
+          };
+          setPreferences(soonToBePreferences);
+        } catch (error) {
+          console.error("Error loading preferences:", error);
+        }
+      }
 
-    function cleanApplications(
-      apps: RayCastApplication[],
-      runningApps: string[],
-      preferences: AppPreferences,
-    ): Application[] {
-      const runningCheck = (app: RayCastApplication) => {
-        return runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!);
-      };
-
-      return apps
-        .filter((app) => app && app.bundleId)
-        .map((app) => ({
-          bundleId: app.bundleId!,
-          name: app.name,
-          path: app.path,
-          running: runningCheck(app),
-        }));
-    }
-
-    async function fetchApplications() {
       try {
-        const soonToBePreferences = await loadPreferences();
-        const apps: RayCastApplication[] = await getApplications();
-        if (!fastMode) {
-          const runningApps = await getRunningApps();
-          const cleanedApps = cleanApplications(apps, runningApps, soonToBePreferences);
-          setApplications(cleanedApps);
-        } else {
-          setApplications(
-            apps.map((app) => ({
+        const runningApps = fastMode ? [] : await getRunningApps();
+        setApplications(
+          apps
+            .filter((app) => app && app.bundleId)
+            .map((app) => ({
               bundleId: app.bundleId!,
               name: app.name,
               path: app.path,
-              running: false,
+              running: runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!),
             })),
-          );
-        }
+        );
       } catch (error) {
         console.error("Error fetching applications:", error);
-      } finally {
-        setIsLoading(false);
       }
+
+      setIsLoading(false);
     }
 
-    async function getRunningApps(): Promise<string[]> {
-      try {
-        const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
-        const runningApps = stdout
-          .split("\n")
-          .filter((line) => line.includes(".app") && line.includes("Contents/MacOS/"))
-          .map((line) =>
-            line.substring(
-              line.indexOf("Applications/") + 13,
-              line.indexOf("/", line.indexOf("Applications/") + 13) - 4,
-            ),
-          )
-          .filter((app) => !app.includes("??"))
-          .filter((app, index, self) => self.indexOf(app) === index);
-
-        return runningApps;
-      } catch (error) {
-        console.error("Error fetching running applications:", error);
-        return [];
-      }
-    }
-
-    async function fetchHitHistory() {
-      try {
-        const stored = await LocalStorage.getItem<string>("hitHistory");
-        if (stored) {
-          const parsedHitHistory = JSON.parse(stored);
-          setHitHistory(parsedHitHistory);
-        }
-      } catch (error) {
-        console.error("Error loading hit history:", error);
-      }
-    }
-
-    fetchHitHistory();
-    fetchApplications();
+    initApp();
   }, []);
 
   function passesSearchFilter(app: Application): { passes: boolean; score: number } {
@@ -247,8 +219,8 @@ export default function Command() {
     switch (sortType) {
       case "frecency":
         return (
-          (calcFrecencyValue(b.bundleId) - calcFrecencyValue(a.bundleId)) * 0.75 +
-          (passesSearchFilter(b).score - passesSearchFilter(a).score) * 0.25
+          0.8 * (calcFrecencyValue(b.bundleId) - calcFrecencyValue(a.bundleId)) +
+          0.2 * (passesSearchFilter(b).score - passesSearchFilter(a).score)
         );
       case "alphabetical":
         return a.name.localeCompare(b.name);
@@ -332,6 +304,12 @@ export default function Command() {
           {
             icon: DEBUG_MODE ? { source: Icon.Text, tintColor: Color.Orange } : undefined,
             tooltip: DEBUG_MODE ? `Search Score: ${passesSearchFilter(app).score}` : undefined,
+          },
+          {
+            icon: DEBUG_MODE ? { source: Icon.Hashtag, tintColor: Color.Red } : undefined,
+            tooltip: DEBUG_MODE
+              ? `Total score: ${0.8 * calcFrecencyValue(app.bundleId) + 0.2 * passesSearchFilter(app).score}`
+              : undefined,
           },
         ]}
         actions={
