@@ -18,14 +18,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Application,
   AppPreferences,
-  getAppIcon,
+  asyncGetAppIcon,
   getRunningApps,
   HitHistory,
   RenameItem,
   runTerminalCommand,
   ToggleableAppPreferences,
 } from "./imports";
-
 const DEBUG_MODE = true;
 const SEARCH_STRICTNESS = 0.35;
 const FARTHEST_BACK_HIT_DATE = 1000 * 60 * 60 * 24 * 30; // 30 days
@@ -67,14 +66,19 @@ export default function Command() {
         LocalStorage.getItem<string>("appPreferences"),
         getApplications(),
       ]);
+      const a = apps.map((app) => `${app.name ?? "N/A"}, ${app.localizedName ?? "N/A"}`).sort();
+      for (const name of a) {
+        console.log(name);
+      }
+      console.log(
+        "Any invalid apps?",
+        apps.some((app) => !app.name),
+      );
 
       if (unparsedHitHistoryJSON) {
         try {
           const parsedHitHistory: HitHistory = JSON.parse(unparsedHitHistoryJSON);
           const cutoff = new Date(new Date().getTime() - FARTHEST_BACK_HIT_DATE);
-          console.log("--------------------------");
-          console.log("Cleaning hit history", parsedHitHistory);
-          console.log("Cutoff", cutoff);
 
           const purgedHitHistory: HitHistory = {};
           for (const hitHistoryItem of Object.entries(parsedHitHistory)) {
@@ -85,10 +89,8 @@ export default function Command() {
             }
           }
 
-          console.log("New hit history", purgedHitHistory);
           LocalStorage.setItem("hitHistory", JSON.stringify(purgedHitHistory));
           setHitHistory(purgedHitHistory);
-          console.log("--------------------------");
         } catch (error) {
           console.error("Error loading hit history:", error);
         }
@@ -129,17 +131,26 @@ export default function Command() {
       }
 
       try {
-        const runningApps = fastMode ? [] : await getRunningApps();
-        setApplications(
-          apps
-            .filter((app) => app && app.bundleId)
-            .map((app) => ({
-              bundleId: app.bundleId!,
-              name: app.name,
-              path: app.path,
-              running: runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!),
-            })),
+        const runningApps = !fastMode ? await getRunningApps() : [];
+        // const imagePaths = "/Users/miles/Code Projects/Random Temp/SavedIcons/Audible.png";
+        // const audibleIcon = await asyncGetAppIcon("Arc");
+        const imagePaths: Record<string, string> = Object.fromEntries(
+          await Promise.all(
+            apps.map(async (app) => [app.bundleId!, await asyncGetAppIcon({ appName: app.name, appPath: app.path })]),
+          ),
         );
+        // const imagePaths: Record<string, string> = {};
+        console.log(imagePaths);
+        const cleaned: Application[] = apps
+          .filter((app) => app && app.bundleId)
+          .map((app) => ({
+            bundleId: app.bundleId!,
+            name: app.name,
+            path: app.path,
+            running: runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!),
+            iconPath: imagePaths[app.bundleId!] /* ?? "/Applications/Arc.app/Icons?" */,
+          }));
+        setApplications(cleaned);
       } catch (error) {
         console.error("Error fetching applications:", error);
       }
@@ -285,11 +296,15 @@ export default function Command() {
     LocalStorage.setItem("hitHistory", JSON.stringify(newHitHistory));
   }
 
+  ("/Users/miles/Code Projects/Personal/Raycast Commands/Extensions/app-search/Cached App Icons/Arc.png");
+
   const AppItem = ({ preferences, app }: { preferences: AppPreferences; app: Application }) => {
     return (
       <List.Item
         key={app.bundleId}
-        icon={!fastMode ? getAppIcon(app) : undefined}
+        // icon={!fastMode ? app.iconPath : undefined}
+        // icon={"/Applications/Arc.app/Icons?"}
+        icon={"/Users/miles/Code Projects/Personal/Raycast Commands/Extensions/app-search/Cached App Icons/Arc.png"}
         title={preferences.customNames[app.bundleId] || app.name}
         subtitle={preferences.customNames[app.bundleId] ? app.name : ""}
         accessories={[

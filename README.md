@@ -4,6 +4,11 @@ Open or move to an app
 
 ## Todo
 
+### BROKEN THINGS
+
+- [ ] Hide apps is no longer working
+- [ ] Grapher is not being caught as running
+
 ### Specific to branch
 
 - [ ] Figure out way to read command key binds
@@ -15,3 +20,8 @@ Open or move to an app
 - [ ] Include custom sorting order
 - [ ] Option to add website urls
 - [ ] Add resetting frecency values option
+
+## Steps
+
+Look for Icons? file
+If it exists, copy the hex contents and then remove first 260 bytes
