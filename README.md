@@ -1,27 +1,22 @@
 # App Search
 
-Open or move to an app
+A raycast command to traverse between apps with high levels of customizability and user experience
 
 ## Todo
 
-### BROKEN THINGS
+### Broken
 
-- [ ] Hide apps is no longer working
-- [ ] Grapher is not being caught as running
-
-### Specific to branch
-
-- [ ] Figure out way to read command key binds
+- [x] Zoom not correctly being updated as running or not (maybe not it might just be a background problem)
+- [x] Add 'reset icon' button to update an items icon
+- [ ] Most default Apple apps dont show an icon
 
 ### General
 
 - [x] Add option to not show running icon
 - [x] Different sort options (alphabetical, frecency, custom, etc)
+- [x] Display icons for default apps
+- [x] Display correct (updated) icons for apps
+- [x] Display correct names for apps
+- [x] Add resetting frecency values option
 - [ ] Include custom sorting order
-- [ ] Option to add website urls
-- [ ] Add resetting frecency values option
-
-## Steps
-
-Look for Icons? file
-If it exists, copy the hex contents and then remove first 260 bytes
+- [x] Option to add website urls

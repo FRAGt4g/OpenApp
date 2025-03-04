@@ -21,7 +21,8 @@
   "dependencies": {
     "@raycast/api": "^1.92.1",
     "@raycast/utils": "^1.17.0",
-    "fuse.js": "^7.1.0"
+    "fuse.js": "^7.1.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.11",

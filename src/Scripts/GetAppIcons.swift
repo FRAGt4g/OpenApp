@@ -6,11 +6,20 @@ guard arguments.count > 2 else {
     exit(1)
 }
 
-let appName = arguments[1]
-let destinationPath = arguments[2]
+let arg1 = arguments[1]
+if arg1 == "-l" {
+    let appPaths = Array(arguments[3..<arguments.count])
+    let destinationPath = arguments[2]
+    getAppIcons(appPaths: appPaths, saveLocation: destinationPath)
+}
+else {
+    let appPath = arguments[1]
+    let destinationPath = arguments[2]
+    getAppIcon(appPath: appPath, saveLocation: destinationPath)
+}
 
-func getAppIcon(appName: String, saveLocation: String) {
-    let appPath = "/Applications/\(appName).app"
+
+func getAppIcon(appPath: String, saveLocation: String) {
     let icon: Optional<NSImage> = NSWorkspace.shared.icon(forFile: appPath)
     if let icon = icon {
         let imageData = icon.tiffRepresentation
@@ -32,5 +41,9 @@ func getAppIcon(appName: String, saveLocation: String) {
     }
 }
 
-getAppIcon(appName: appName, saveLocation: destinationPath)
-// getAppIcon(appName: "Arc", saveLocation: "/Users/miles/Code Projects/Random Temp/SavedIcons/Arc.png")
+func getAppIcons(appPaths: [String], saveLocation: String) {
+    for appPath in appPaths {
+        let saveLocation = saveLocation + "/" + appPath.split(separator: "/").last!.replacingOccurrences(of: ".app", with: "") + ".png"
+        getAppIcon(appPath: appPath, saveLocation: saveLocation)
+    }
+}
