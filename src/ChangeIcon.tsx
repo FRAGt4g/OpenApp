@@ -35,6 +35,7 @@ export default function ChangeIcon(props: {
   const [iconPath, setIconPath] = useState<Image.ImageLike>("");
   const [error, setError] = useState("");
   const { pop } = useNavigation();
+
   function handleSubmit() {
     props.onSave(iconPath);
     showToast({

@@ -11,7 +11,7 @@ export async function runTerminalCommand(command: string) {
   return { stdout, stderr };
 }
 
-async function getRunningApps(): Promise<string[]> {
+async function getRunningApps(): Promise<Set<string>> {
   try {
     const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
     const runningApps = stdout
@@ -24,10 +24,10 @@ async function getRunningApps(): Promise<string[]> {
       .filter((app) => !app.includes("??"))
       .filter((app, index, self) => self.indexOf(app) === index);
 
-    return runningApps;
+    return new Set(runningApps);
   } catch (error) {
     console.error("Error fetching running applications:", error);
-    return [];
+    return new Set();
   }
 }
 
@@ -40,6 +40,10 @@ export async function asyncGetAppIcon({
   appPath: string;
   checkCache?: boolean;
 }): Promise<string> {
+  const specialPrint = (input: string) => {
+    const condition = appName.includes("Band");
+    if (condition) console.log(input);
+  };
   const brokenIconNames: Record<string, string> = {
     Arc: "Arc Browser",
   };
@@ -73,7 +77,7 @@ export async function asyncGetAppIcon({
 
   // Load from cached icons if available
   if (checkCache && fs.existsSync(destinationPath + ".png")) {
-    // specialPrint(`${appName} has a cached icon file, using ${destinationPath + ".png"}`);
+    specialPrint(`${appName} has a cached icon file, using ${destinationPath + ".png"}`);
     return destinationPath + ".png";
   }
 
@@ -89,13 +93,13 @@ export async function asyncGetAppIcon({
 
       const iconBuffer = Buffer.from(binaryData, "utf-8").subarray(260); // Convert to Buffer and use subarray
       fs.writeFileSync(destinationPath + ".icns", iconBuffer.toString("base64")); // Ensure it's a Buffer
-      // specialPrint(`${appName} has a custom Icon? file, using ${destinationPath + ".icns"}`);
+      specialPrint(`${appName} has a custom Icon? file, using ${destinationPath + ".icns"}`);
       return destinationPath + ".icns";
     }
     // If the app has no Icon? file, use the first .icns file in the Resources folder
     else {
       const iconFiles = readdirSync(resourcesPath).filter((file) => file.endsWith(".icns"));
-      // specialPrint(`${appName} has ${iconFiles.length} icns files in ${resourcesPath}`);
+      specialPrint(`${appName} has ${iconFiles.length} icns files in ${resourcesPath}`);
       if (iconFiles.length > 1) {
         //search plist.info for CFBundleIconFile
         const plistInfo = fs.readFileSync(`${appPath}/Contents/Info.plist`, "utf-8");
@@ -104,14 +108,16 @@ export async function asyncGetAppIcon({
             .match(/<key>CFBundleIconFile<\/key>\s*<string>(.*?)<\/string>/)?.[1]
             ?.trim()
             .replace(/\.icns$/, "") + ".icns"; // Ensure that the name always ends with .icns exactly once
-        // specialPrint(`${appName} ${iconFile ? "has" : "does not have"} a plist file at ${appPath}/Contents/Info.plist`);
-        if (iconFile) {
-          // specialPrint(`${appName} has a custom icon file at ${resourcesPath}/${iconFile}`);
+        specialPrint(
+          `${appName} ${iconFile !== "undefined.icns" ? "has" : "does not have"} a plist file at ${appPath}/Contents/Info.plist (${iconFile})`,
+        );
+        if (iconFile !== "undefined.icns") {
+          specialPrint(`${appName} has a custom icon file at ${resourcesPath}/${iconFile}`);
           return `${resourcesPath}/${iconFile}`;
         }
       } else if (iconFiles.length == 1) {
         const iconFile = iconFiles[0];
-        // specialPrint(`${appName} has a default icns file at ${resourcesPath}/${iconFile}`);
+        specialPrint(`${appName} has a default icns file at ${resourcesPath}/${iconFile}`);
         return `${resourcesPath}/${iconFile}`;
       }
     }
@@ -119,7 +125,7 @@ export async function asyncGetAppIcon({
     // Do nothing. If there is an error, use next method to get icon
   }
 
-  // specialPrint(`${appName} has no custom icon file, making icon from swift file`);
+  specialPrint(`${appName} has no custom icon file, making icon from swift file`);
   return await runSwiftCommand();
 }
 
@@ -134,7 +140,6 @@ type SortType = "frecency" | "alphabetical" | "custom";
 
 interface AppPreferences {
   sortType: SortType;
-  websites: Openable[];
 
   quickCommands: Record<string, { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent }>;
   cachedIconDirectories: Record<string, { default: Image.ImageLike; custom: Image.ImageLike | null }>;
@@ -148,11 +153,12 @@ interface AppPreferences {
   prioritizeRunningApps: boolean;
   showWebsites: boolean;
   showHidden: boolean;
+
+  customDirectoryOpeners: Record<string, string>;
 }
 
 const defaultPreferences: AppPreferences = {
   sortType: "frecency",
-  websites: [],
 
   quickCommands: {},
   cachedIconDirectories: {},
@@ -166,6 +172,8 @@ const defaultPreferences: AppPreferences = {
   prioritizeRunningApps: true,
   showWebsites: true,
   showHidden: false,
+
+  customDirectoryOpeners: {},
 };
 
 interface HitHistory {
@@ -173,7 +181,7 @@ interface HitHistory {
 }
 
 interface Openable {
-  type: "app" | "website";
+  type: "app" | "website" | "directory";
   icon: Image.ImageLike;
   running: boolean;
   name: string;

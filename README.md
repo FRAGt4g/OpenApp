@@ -8,7 +8,6 @@ A raycast command to traverse between apps with high levels of customizability a
 
 - [x] Zoom not correctly being updated as running or not (maybe not it might just be a background problem)
 - [x] Add 'reset icon' button to update an items icon
-- [ ] Most default Apple apps dont show an icon
 
 ### General
 

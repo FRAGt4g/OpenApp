@@ -16,6 +16,7 @@ import {
 import Fuse from "fuse.js";
 import fetch from "node-fetch";
 import { useEffect, useMemo, useState } from "react";
+import AddSystemDirectory from "./AddSystemDirectory";
 import AddWebsite from "./AddWebsite";
 import ChangeIcon from "./ChangeIcon";
 import {
@@ -31,9 +32,8 @@ import {
   SortType,
   ToggleableAppPreferences,
 } from "./imports";
+import TEST_COMP from "./testcomp";
 
-const DEBUG_MODE = false;
-const SEARCH_STRICTNESS = 0.35;
 const FARTHEST_BACK_HIT_DATE = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 export default function Command() {
@@ -41,15 +41,17 @@ export default function Command() {
   const [preferences, setPreferences] = useState<AppPreferences>(defaultPreferences);
   const [applications, setApplications] = useState<Openable[]>([]);
   const [websites, setWebsites] = useState<Openable[]>([]);
+  const [directories, setDirectories] = useState<Openable[]>([]);
   const [hitHistory, setHitHistory] = useState<HitHistory>({});
   const [isLoading, setIsLoading] = useState(true);
   const [sortType, setSortType] = useState<SortType>("frecency");
   const [searchText, setSearchText] = useState("");
   const { push } = useNavigation();
+  const { setOpenerApps, render } = TEST_COMP();
 
   const allOpenables = useMemo(() => {
-    return applications.concat(websites);
-  }, [applications, websites]);
+    return applications.concat(websites).concat(directories);
+  }, [applications, websites, directories]);
 
   const [lambdaDecay, fuzzySearchThreshold, timeScale] = useMemo(() => {
     return [
@@ -57,7 +59,7 @@ export default function Command() {
       parseFloat(settings.fuzzySearchThresholdDropdown),
       parseFloat(settings.timeScaleDropdown),
     ];
-  }, [settings]);
+  }, []);
 
   const [pins, regular, hidden] = useMemo(() => {
     return [
@@ -80,19 +82,33 @@ export default function Command() {
 
   useEffect(() => {
     async function initApp() {
-      const [unparsedHitHistoryJSON, unparsedPreferencesJSON, unparsedWebsitesJSON, apps] = await Promise.all([
-        LocalStorage.getItem<string>("hitHistory"),
-        LocalStorage.getItem<string>("appPreferences"),
-        LocalStorage.getItem<string>("websites"),
-        getApplications().then((apps) => apps.filter((app) => app && app.bundleId)),
-      ]);
+      let parsedWebsites: Openable[] = [];
+      let parsedDirectories: Openable[] = [];
+
+      const [unparsedHitHistoryJSON, unparsedPreferencesJSON, unparsedWebsitesJSON, unparsedDirectoriesJSON, apps] =
+        await Promise.all([
+          LocalStorage.getItem<string>("hitHistory"),
+          LocalStorage.getItem<string>("appPreferences"),
+          LocalStorage.getItem<string>("websites"),
+          LocalStorage.getItem<string>("directories"),
+          getApplications().then((apps) => apps.filter((app) => app && app.bundleId)),
+        ]);
 
       if (unparsedWebsitesJSON) {
         try {
-          const a = JSON.parse(unparsedWebsitesJSON) as Openable[];
-          setWebsites(a);
+          parsedWebsites = JSON.parse(unparsedWebsitesJSON) as Openable[];
+          setWebsites(parsedWebsites);
         } catch (error) {
           console.error("Error loading websites:", error);
+        }
+      }
+
+      if (unparsedDirectoriesJSON) {
+        try {
+          parsedDirectories = JSON.parse(unparsedDirectoriesJSON);
+          setDirectories(parsedDirectories);
+        } catch (error) {
+          console.error("Error loading directories:", error);
         }
       }
 
@@ -137,7 +153,7 @@ export default function Command() {
       }
 
       try {
-        const runningApps = !settings.fastMode ? await getRunningApps() : [];
+        const runningApps = !settings.fastMode ? await getRunningApps() : new Set();
         const imagePaths = soonToBePreferences.cachedIconDirectories;
         if (!settings.fastMode) {
           for (const app of apps) {
@@ -159,19 +175,24 @@ export default function Command() {
           id: app.bundleId!,
           name: app.path.split("/").pop()!.replace(".app", ""), // Use the custom name of the app based on name of '.app' file
           path: app.path,
-          running: runningApps.includes(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!),
+          running: runningApps.has(app.name) && !preferences.appsWithoutRunningCheck.includes(app.bundleId!),
           icon: imagePaths[app.bundleId!].custom ?? imagePaths[app.bundleId!].default,
           type: "app",
         }));
-        const cleanedWebsites: Openable[] = soonToBePreferences.websites.map((website) => ({
+        const cleanedWebsites: Openable[] = parsedWebsites.map((website) => ({
           ...website,
-          icon: imagePaths[website.id].custom ?? imagePaths[website.id].default ?? website.icon,
+          icon: imagePaths[website.id]?.custom ?? imagePaths[website.id]?.default ?? website.icon,
+          type: "website",
         }));
-
-        console.log(cleanedApplications.map((app) => app.icon));
+        const cleanedDirectories: Openable[] = parsedDirectories.map((directory) => ({
+          ...directory,
+          icon: imagePaths[directory.id]?.custom ?? imagePaths[directory.id]?.default ?? directory.icon,
+          type: "directory",
+        }));
 
         setApplications(cleanedApplications);
         setWebsites(cleanedWebsites);
+        setDirectories(cleanedDirectories);
       } catch (error) {
         console.error("Error fetching applications:", error);
       }
@@ -187,8 +208,7 @@ export default function Command() {
 
     const options = {
       includeScore: true,
-      //TODO: Remove in production
-      threshold: DEBUG_MODE ? SEARCH_STRICTNESS : fuzzySearchThreshold,
+      threshold: fuzzySearchThreshold,
       keys: [
         { name: "name", weight: 0.3 },
         { name: "customName", weight: 0.7 },
@@ -317,6 +337,28 @@ export default function Command() {
     );
   };
 
+  const openAddSystemDirectoryForm = () => {
+    push(
+      <AddSystemDirectory
+        onSave={async (name, path) => {
+          const soonToBeDirectories: Openable[] = [
+            ...directories,
+            {
+              id: path,
+              name: name,
+              path: path,
+              running: false,
+              icon: path.endsWith("/") ? Icon.Folder : Icon.Document,
+              type: "directory",
+            },
+          ];
+          setDirectories(soonToBeDirectories);
+          await LocalStorage.setItem("directories", JSON.stringify(soonToBeDirectories));
+        }}
+      />,
+    );
+  };
+
   function incrementFrecency(app: Openable) {
     const newHitHistory = { ...hitHistory };
     newHitHistory[app.id] = (newHitHistory[app.id] ?? []).concat([new Date().toISOString()]);
@@ -340,18 +382,8 @@ export default function Command() {
             tooltip: app.type === "website" ? "Website" : undefined,
           },
           {
-            icon: DEBUG_MODE ? { source: Icon.Clock, tintColor: Color.Blue } : undefined,
-            tooltip: DEBUG_MODE ? `Frecency Score: ${calcFrecencyValue(app.id)}` : undefined,
-          },
-          {
-            icon: DEBUG_MODE ? { source: Icon.Text, tintColor: Color.Orange } : undefined,
-            tooltip: DEBUG_MODE ? `Search Score: ${passesSearchFilter(app).score}` : undefined,
-          },
-          {
-            icon: DEBUG_MODE ? { source: Icon.Hashtag, tintColor: Color.Red } : undefined,
-            tooltip: DEBUG_MODE
-              ? `Total score: ${0.8 * calcFrecencyValue(app.id) + 0.2 * passesSearchFilter(app).score}`
-              : undefined,
+            icon: app.type === "directory" ? { source: Icon.Folder } : undefined,
+            tooltip: app.type === "directory" ? "System Directory" : undefined,
           },
         ]}
         actions={
@@ -359,6 +391,11 @@ export default function Command() {
             <Action.Open
               title={app.running ? `Go to ${app.type}` : `Open ${app.type}`}
               target={app.path}
+              application={
+                app.type === "directory" && preferences.customDirectoryOpeners[app.id]
+                  ? preferences.customDirectoryOpeners[app.id]
+                  : "default"
+              }
               icon={Icon.AppWindow}
               onOpen={() => {
                 setAppRunningStatus(app, true);
@@ -419,6 +456,26 @@ export default function Command() {
                 }
                 shortcut={{ modifiers: ["cmd", "shift"], key: "n" }}
               />
+              {/* {app.type === "directory" && (
+                <Action
+                  title="Set Custom Opener"
+                  icon={Icon.Pencil}
+                  onAction={() =>
+                    push(
+                      <ChangeOpener
+                        directory={app}
+                        gatherOpeners={() => getOpeners(app)}
+                        onRename={async (name) => {
+                          const newPreferences = { ...preferences };
+                          newPreferences.customDirectoryOpeners[app.id] = name;
+                          setPreferences(newPreferences);
+                          await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                        }}
+                      />,
+                    )
+                  }
+                />
+              )} */}
               <Action
                 title="Set Custom Icon"
                 icon={Icon.Brush}
@@ -454,7 +511,7 @@ export default function Command() {
                   }}
                 />
               )}
-              {!settings.fastMode && (
+              {!settings.fastMode && app.type === "app" && (
                 <Action
                   title={
                     preferences.appsWithoutRunningCheck.includes(app.id)
@@ -482,6 +539,18 @@ export default function Command() {
                   }}
                 />
               )}
+              {/* TODO: Add this back in */}
+              <ActionPanel.Submenu
+                title="Set Default Opener To…"
+                icon={Icon.AppWindow}
+                onOpen={() => {
+                  getApplications(app.path).then((apps) => {
+                    setOpenerApps(apps);
+                  });
+                }}
+              >
+                {render}
+              </ActionPanel.Submenu>
               <Action
                 title="Refresh App Icon"
                 icon={Icon.ArrowCounterClockwise}
@@ -502,7 +571,7 @@ export default function Command() {
                   setIsLoading(false);
                 }}
               />
-              {app.type === "website" && (
+              {app.type !== "app" && (
                 <Action
                   title="Delete"
                   icon={Icon.Trash}
@@ -510,19 +579,25 @@ export default function Command() {
                     if (
                       await confirmAlert({
                         title: "Are you sure?",
-                        message:
-                          "This will delete the website from the list of things you can open and reset the frecency value.",
+                        message: `This will delete the ${app.type} from the list of things you can open and reset the frecency value.`,
                         primaryAction: {
                           title: "Delete",
                           style: Alert.ActionStyle.Destructive,
                         },
                       })
                     ) {
-                      setWebsites(websites.filter((website) => website.id !== app.id));
-                      LocalStorage.setItem("websites", JSON.stringify(websites));
+                      if (app.type === "website") {
+                        const newWebsites = websites.filter((website) => website.id !== app.id);
+                        setWebsites(newWebsites);
+                        LocalStorage.setItem("websites", JSON.stringify(newWebsites));
+                      } else {
+                        const newDirectories = directories.filter((directory) => directory.id !== app.id);
+                        setDirectories(newDirectories);
+                        LocalStorage.setItem("directories", JSON.stringify(newDirectories));
+                      }
                       showToast({
                         style: Toast.Style.Success,
-                        title: "Website deleted",
+                        title: `"${app.name}" has been deleted!`,
                       });
                     }
                   }}
@@ -557,6 +632,7 @@ export default function Command() {
                 />
               )}
               <Action title="Add Website" icon={Icon.Globe} onAction={openAddWebsiteForm} />
+              <Action title="Add System Directory" icon={Icon.Folder} onAction={openAddSystemDirectoryForm} />
               <Action
                 title="Reset Frecency Values"
                 icon={Icon.Clock}
