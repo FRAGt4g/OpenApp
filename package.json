@@ -21,7 +21,8 @@
   "dependencies": {
     "@raycast/api": "^1.92.1",
     "@raycast/utils": "^1.17.0",
-    "fuse.js": "^7.1.0"
+    "fuse.js": "^7.1.0",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@raycast/eslint-config": "^1.0.11",
@@ -195,6 +196,42 @@
           "value": "1"
         }
       ]
+    },
+    {
+      "name": "showBoltIconForRunningApps",
+      "label": "Whether or not to show the bolt icon for running apps",
+      "title": "Show Bolt Icon For Running Apps",
+      "description": "Show the bolt icon for running apps in the search bar",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "showPinIconForPinnedApps",
+      "label": "Whether or not to show the pin icon for pinned apps",
+      "title": "Show Pin Icon For Pinned Apps",
+      "description": "Show the pin icon for pinned apps in the search bar",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "showEyeIconForHiddenApps",
+      "label": "Whether or not to show the eye icon for hidden apps",
+      "title": "Show Eye Icon For Hidden Apps",
+      "description": "Show the eye icon for hidden apps in the search bar",
+      "type": "checkbox",
+      "default": true,
+      "required": false
+    },
+    {
+      "name": "showIdentifierForWebsitesAndDirectories",
+      "label": "Whether or not to show the identifier for websites and directories",
+      "title": "Show Identifier For Websites And Directories",
+      "description": "Show the identifier for websites and directories in the search bar",
+      "type": "checkbox",
+      "default": true,
+      "required": false
     }
   ]
 }
