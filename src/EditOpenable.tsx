@@ -1,7 +1,17 @@
-import { Action, ActionPanel, Application, Form, Icon, Image, showToast, Toast, useNavigation } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Application,
+  Color,
+  Form,
+  Icon,
+  Image,
+  showToast,
+  Toast,
+  useNavigation,
+} from "@raycast/api";
 import { useEffect, useState } from "react";
 import { Openable } from "./imports";
-
 const pathTypes = ["Emoji", "File Path", "Url", "Raycast Icon"] as const;
 
 function isEmoji(text: string): boolean {
@@ -102,6 +112,12 @@ export default function EditOpenable(props: {
         autoFocus
       />
 
+      <Form.TagPicker id="tags" title="Tags">
+        <Form.TagPicker.Item value="test" title="Test" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
+        <Form.TagPicker.Item value="test2" title="Test2" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
+        <Form.TagPicker.Item value="test3" title="Test3" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
+        <Form.TagPicker.Item value="test4" title="Test4" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
+      </Form.TagPicker>
       <Form.Separator />
 
       <Form.Dropdown
@@ -210,7 +226,7 @@ export default function EditOpenable(props: {
           defaultValue={defaultOpener}
         >
           {openers.map((opener) => (
-            <Form.Dropdown.Item key={opener.path} value={opener.path} title={opener.name} />
+            <Form.Dropdown.Item key={opener.path} value={opener.name} title={opener.name} />
           ))}
         </Form.Dropdown>
       )}

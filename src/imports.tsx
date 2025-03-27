@@ -1,8 +1,7 @@
-import { Image, Keyboard } from "@raycast/api";
+import { Color, Image, Keyboard } from "@raycast/api";
 import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
-import RenameItem from "./RenameItem";
 
 const ROOT_PATH = "/Users/miles/Code Projects/Personal/Raycast Commands/Extensions/app-search";
 
@@ -11,7 +10,7 @@ export async function runTerminalCommand(command: string) {
   return { stdout, stderr };
 }
 
-async function getRunningApps(): Promise<Set<string>> {
+export async function getRunningApps(): Promise<Set<string>> {
   try {
     const { stdout } = await runTerminalCommand("ps aux | grep -i '.app'");
     const runningApps = stdout
@@ -129,22 +128,23 @@ export async function asyncGetAppIcon({
   return await runSwiftCommand();
 }
 
-type ToggleableAppPreferences =
+export type ToggleableAppPreferences =
   | "pinnedApps"
   | "hidden"
   | "appsWithoutRunningCheck"
   | "prioritizeRunningApps"
   | "showHidden";
 
-type SortType = "frecency" | "alphabetical" | "custom";
+export type SortType = "frecency" | "alphabetical" | "custom";
 
-interface AppPreferences {
+export interface AppPreferences {
   sortType: SortType;
 
   quickCommands: Record<string, { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent }>;
   cachedIconDirectories: Record<string, { default: Image.ImageLike; custom: Image.ImageLike | null }>;
   customNames: Record<string, string>;
   appImportance: Record<string, number>;
+  appTags: Record<string, string[]>;
 
   appsWithoutRunningCheck: string[];
   pinnedApps: string[];
@@ -157,13 +157,14 @@ interface AppPreferences {
   customDirectoryOpeners: Record<string, string>;
 }
 
-const defaultPreferences: AppPreferences = {
+export const defaultPreferences: AppPreferences = {
   sortType: "frecency",
 
   quickCommands: {},
   cachedIconDirectories: {},
   customNames: {},
   appImportance: {},
+  appTags: {},
 
   appsWithoutRunningCheck: [],
   pinnedApps: [],
@@ -176,11 +177,17 @@ const defaultPreferences: AppPreferences = {
   customDirectoryOpeners: {},
 };
 
-interface HitHistory {
+export interface HitHistory {
   [key: string]: string[];
 }
 
-interface Openable {
+export type Tag = {
+  title: string;
+  icon: Image.ImageLike;
+  color: Color.ColorLike;
+};
+
+export interface Openable {
   type: "app" | "website" | "directory";
   icon: Image.ImageLike;
   running: boolean;
@@ -189,13 +196,14 @@ interface Openable {
   id: string;
 }
 
-interface DeepSettings {
+export interface DeepSettings {
   fuzzySearchThresholdDropdown: string;
   showSortOptions: boolean;
   lambdaDecayDropdown: string;
   timeScaleDropdown: string;
   fastMode: boolean;
+  showBoltIconForRunningApps: boolean;
+  showPinIconForPinnedApps: boolean;
+  showEyeIconForHiddenApps: boolean;
+  showIdentifierForWebsitesAndDirectories: boolean;
 }
-
-export { defaultPreferences, getRunningApps, RenameItem };
-export type { AppPreferences, DeepSettings, HitHistory, Openable, SortType, ToggleableAppPreferences };

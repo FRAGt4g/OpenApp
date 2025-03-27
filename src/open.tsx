@@ -17,7 +17,9 @@ import {
 import Fuse from "fuse.js";
 import fetch from "node-fetch";
 import { useEffect, useMemo, useState } from "react";
+import AddTag from "./AddTag";
 import EditOpenable from "./EditOpenable";
+import EditTags from "./EditTags";
 import {
   AppPreferences,
   asyncGetAppIcon,
@@ -31,7 +33,6 @@ import {
   ToggleableAppPreferences,
 } from "./imports";
 import NewOpenable from "./NewOpenable";
-
 const FARTHEST_BACK_HIT_DATE = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 export default function Command() {
@@ -325,37 +326,81 @@ export default function Command() {
   }
 
   const AppItem = ({ app }: { app: Openable }) => {
+    const Accessories: List.Item.Accessory[] = [
+      ...Object.keys(preferences.appTags[app.id] ?? {}).map((tag) => ({
+        tag: {
+          value: tag,
+          color: Color.Blue,
+        },
+        tooltip: tag,
+      })),
+      // TODO: Add custom tags for searching
+      {
+        tag: {
+          value: app.type,
+          color: Color.Blue,
+        },
+        tooltip: app.type,
+      },
+
+      {
+        icon:
+          app.type === "website" && settings.showIdentifierForWebsitesAndDirectories
+            ? { source: Icon.Globe, tintColor: Color.SecondaryText }
+            : undefined,
+        tooltip: app.type === "website" ? "Website" : undefined,
+      },
+      {
+        icon:
+          app.type === "directory" && settings.showIdentifierForWebsitesAndDirectories
+            ? { source: Icon.Folder, tintColor: Color.Blue }
+            : undefined,
+        tooltip: app.type === "directory" ? "File" : undefined,
+      },
+      {
+        icon: preferences.hidden.includes(app.id) && settings.showEyeIconForHiddenApps ? Icon.EyeDisabled : undefined,
+        tooltip: preferences.hidden.includes(app.id) ? "Hidden" : undefined,
+      },
+      {
+        icon: preferences.pinnedApps.includes(app.id) && settings.showPinIconForPinnedApps ? Icon.Tack : undefined,
+        tooltip: preferences.pinnedApps.includes(app.id) ? "Pinned" : undefined,
+      },
+      {
+        icon:
+          app.running && !settings.fastMode && settings.showBoltIconForRunningApps
+            ? { source: Icon.Bolt, tintColor: Color.Green }
+            : undefined,
+        tooltip: app.running ? "Running" : "Not Running",
+      },
+    ];
+
+    const title = preferences.customNames[app.id] || app.name;
+    const subtitle = title === app.name ? "" : app.name; /* + "\t" + "i".repeat(70) */
+    const getPrimaryActionTitle = () => {
+      if (app.type === "directory" && preferences.customDirectoryOpeners[app.id]) {
+        const a = preferences.customDirectoryOpeners[app.id];
+        return `Open with ${a}`;
+      }
+      if (app.running) {
+        return `Switch to tab`;
+      }
+      if (app.type === "app") {
+        return `Open app`;
+      }
+      return `Open in browser`;
+    };
+
     return (
       <List.Item
         icon={!settings.fastMode ? (app.icon ?? Icon.Window) : undefined}
-        title={preferences.customNames[app.id] || app.name}
-        subtitle={preferences.customNames[app.id] ? app.name : ""}
-        accessories={[
-          {
-            icon: app.running && !settings.fastMode ? { source: Icon.Bolt, tintColor: Color.Green } : undefined,
-            tooltip: app.running ? "Running" : "Not Running",
-          },
-          {
-            icon: app.type === "website" ? { source: Icon.Globe } : undefined,
-            tooltip: app.type === "website" ? "Website" : undefined,
-          },
-          {
-            icon: app.type === "directory" ? { source: Icon.Folder } : undefined,
-            tooltip: app.type === "directory" ? "System Directory" : undefined,
-          },
-          {
-            icon: preferences.hidden.includes(app.id) ? { source: Icon.EyeDisabled } : undefined,
-            tooltip: preferences.hidden.includes(app.id) ? "Hidden" : undefined,
-          },
-          {
-            icon: preferences.pinnedApps.includes(app.id) ? { source: Icon.Tack } : undefined,
-            tooltip: preferences.pinnedApps.includes(app.id) ? "Pinned" : undefined,
-          },
-        ].toReversed()}
+        title={title}
+        subtitle={subtitle}
+        accessories={Accessories}
+        quickLook={{ path: app.path, name: title }}
         actions={
           <ActionPanel>
             <Action.Open
-              title={app.running ? `Go to ${app.type}` : `Open ${app.type}`}
+              title={getPrimaryActionTitle()}
               target={app.path}
               application={
                 app.type === "directory" && preferences.customDirectoryOpeners[app.id]
@@ -368,28 +413,28 @@ export default function Command() {
                 incrementFrecency(app);
               }}
             />
+            {app.running && (
+              <Action
+                title={`Close ${app.type}`}
+                icon={Icon.XMarkCircle}
+                onAction={async () => {
+                  setAppRunningStatus(app, false);
+                  try {
+                    setIsLoading(true);
+                    await runTerminalCommand(`osascript -e 'tell application "${app.name}" to quit'`);
+                    setIsLoading(false);
+                  } catch (error) {
+                    await showToast({
+                      style: Toast.Style.Failure,
+                      title: `Failed to close ${app.type}`,
+                      message: String(error),
+                    });
+                  }
+                }}
+                shortcut={{ modifiers: ["ctrl"], key: "x" }}
+              />
+            )}
             <ActionPanel.Submenu title={"App Specific"} icon={Icon.CircleEllipsis}>
-              {app.running && (
-                <Action
-                  title={`Close ${app.type}`}
-                  icon={Icon.XMarkCircle}
-                  onAction={async () => {
-                    setAppRunningStatus(app, false);
-                    try {
-                      setIsLoading(true);
-                      await runTerminalCommand(`osascript -e 'tell application "${app.name}" to quit'`);
-                      setIsLoading(false);
-                    } catch (error) {
-                      await showToast({
-                        style: Toast.Style.Failure,
-                        title: `Failed to close ${app.type}`,
-                        message: String(error),
-                      });
-                    }
-                  }}
-                  shortcut={{ modifiers: ["ctrl"], key: "x" }}
-                />
-              )}
               <Action
                 title={preferences.pinnedApps.includes(app.id) ? "Unpin" : "Pin"}
                 icon={preferences.pinnedApps.includes(app.id) ? Icon.PinDisabled : Icon.Pin}
@@ -448,6 +493,9 @@ export default function Command() {
                     });
                   }}
                 />
+              )}
+              {app.type === "directory" && (
+                <Action.ToggleQuickLook title="Open Directory" icon={Icon.MagnifyingGlass} />
               )}
               {app.type !== "app" && (
                 <Action
@@ -522,11 +570,13 @@ export default function Command() {
               onAction={() =>
                 push(
                   <EditOpenable
-                    startCondition={app}
+                    startCondition={{
+                      ...app,
+                      name: preferences.customNames[app.id] || app.name,
+                    }}
                     gatherOpeners={() => getOpeners(app)}
                     defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
                     onSave={async (changedValues) => {
-                      console.log("updatedOpenable", changedValues);
                       if (changedValues.name) {
                         if (app.type === "app") {
                           preferences.customNames[app.id] = changedValues.name;
@@ -571,36 +621,38 @@ export default function Command() {
               shortcut={{ modifiers: ["cmd"], key: "e" }}
             />
             <Action
-              title="Random Test"
-              icon={Icon.QuestionMarkCircle}
-              onAction={() => {
-                console.log("app", app);
-                for (const option of Object.keys(preferences)) {
-                  const key = option as keyof AppPreferences;
-                  if (
-                    Array.isArray(preferences[key]) &&
-                    (preferences[key] as string[]).length > 0 &&
-                    (preferences[key] as string[]).includes(app.id)
-                  ) {
-                    console.log(
-                      "Preference (",
-                      key,
-                      ")",
-                      (preferences[key] as string[]).find((id) => id === app.id),
-                    );
-                  } else if (
-                    typeof preferences[key] === "object" &&
-                    preferences[key] !== null &&
-                    Object.keys(preferences[key]).includes(app.id)
-                  ) {
-                    console.log("Preference (", key, ")", (preferences[key] as Record<string, unknown>)[app.id]);
-                  }
-                }
+              title="Add Tag"
+              icon={Icon.Tag}
+              onAction={async () => {
+                push(<AddTag onSubmit={() => {}} />);
+              }}
+            />
+            <Action
+              title="Edit All Tags"
+              icon={Icon.Pencil}
+              onAction={async () => {
+                push(
+                  <EditTags
+                    currentTags={[
+                      {
+                        title: "Test",
+                        icon: Icon.Hashtag,
+                        color: Color.Blue,
+                      },
+                      {
+                        title: "Test 2",
+                        icon: Icon.Hashtag,
+                        color: Color.Blue,
+                      },
+                    ]}
+                    onSubmit={() => {}}
+                  />,
+                );
               }}
             />
             <ActionPanel.Section title={"General"}>
               <Action
-                title="Add Website / Directory"
+                title="Add Website / File Directory"
                 icon={Icon.Plus}
                 onAction={() =>
                   push(
@@ -652,15 +704,15 @@ export default function Command() {
               {!settings.fastMode && (
                 <Action
                   title={
-                    preferences.prioritizeRunningApps
-                      ? "Ignore Running Status When Sorting"
-                      : "Pull Running Apps to Top"
+                    preferences.prioritizeRunningApps ? "Don't Prioritize Running Apps" : "Prioritize Running Apps"
                   }
                   icon={Icon.ChevronUpDown}
                   onAction={() => toggle("prioritizeRunningApps", app.id)}
                   shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
                 />
               )}
+            </ActionPanel.Section>
+            <ActionPanel.Section title={"Destructive"}>
               <Action
                 title="Reset Frecency Values"
                 icon={Icon.Clock}
@@ -722,7 +774,6 @@ export default function Command() {
           >
             <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
             <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
-            <List.Dropdown.Item title="Custom" value="custom" icon={Icon.Pencil} />
           </List.Dropdown>
         ) : null
       }
@@ -749,3 +800,27 @@ export default function Command() {
     </List>
   );
 }
+
+// onAction={() => {
+//   for (const option of Object.keys(preferences)) {
+//     const key = option as keyof AppPreferences;
+//     if (
+//       Array.isArray(preferences[key]) &&
+//       (preferences[key] as string[]).length > 0 &&
+//       (preferences[key] as string[]).includes(app.id)
+//     ) {
+//       console.log(
+//         "Preference (",
+//         key,
+//         ")",
+//         (preferences[key] as string[]).find((id) => id === app.id),
+//       );
+//     } else if (
+//       typeof preferences[key] === "object" &&
+//       preferences[key] !== null &&
+//       Object.keys(preferences[key]).includes(app.id)
+//     ) {
+//       console.log("Preference (", key, ")", (preferences[key] as Record<string, unknown>)[app.id]);
+//     }
+//   }
+// }}
