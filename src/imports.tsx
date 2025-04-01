@@ -1,4 +1,4 @@
-import { Color, Image, Keyboard } from "@raycast/api";
+import { Color, Icon, Image, Keyboard } from "@raycast/api";
 import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
@@ -177,13 +177,53 @@ export const defaultPreferences: AppPreferences = {
   customDirectoryOpeners: {},
 };
 
+export function isEmoji(text: string): boolean {
+  return /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/.test(text);
+}
+
+export async function isValidUrl(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+
+    if (!res.ok) return false;
+
+    return res.headers.get("Content-Type")?.startsWith("image") ?? false;
+  } catch (error) {
+    return false;
+  }
+}
+
+export function isValidFileType(file: string) {
+  const validFileTypes = [".png", "Icon?", ".icns"];
+  return validFileTypes.some((value) => file.endsWith(value));
+}
+
+export function looksLikeFilePath(text: string): boolean {
+  return /^(\/|~\/|[a-zA-Z]:\\|\.\/|\.\.\/)/.test(text);
+}
+
+export const pathTypes = ["Emoji", "File Path", "Url", "Raycast Icon"] as const;
+export function getIconType(icon: Image.ImageLike): (typeof pathTypes)[number] {
+  const iconString = icon as string;
+  if (iconString?.startsWith("https://")) {
+    return "Url";
+  }
+  if (isEmoji(iconString)) {
+    return "Emoji";
+  }
+  if (looksLikeFilePath(iconString)) {
+    return "File Path";
+  }
+  return "Raycast Icon";
+}
+
 export interface HitHistory {
   [key: string]: string[];
 }
 
 export type Tag = {
   title: string;
-  icon: Image.ImageLike;
+  icon: Icon;
   color: Color.ColorLike;
 };
 

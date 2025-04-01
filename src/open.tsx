@@ -213,21 +213,55 @@ export default function Command() {
       ],
     };
 
-    const fuse = new Fuse(
-      [
-        {
-          name: app.name.toLowerCase(),
-          customName: (preferences.customNames[app.id] || "").toLowerCase(),
-        },
-      ],
-      options,
-    );
+    // Split search text and app name into words
+    const searchWords = searchText
+      .toLowerCase()
+      .split(" ")
+      .filter((word) => word !== "");
+    const appNameWords = app.name
+      .toLowerCase()
+      .split(" ")
+      .filter((word) => word !== "");
+    const customNameWords = (preferences.customNames[app.id] || "")
+      .toLowerCase()
+      .split(" ")
+      .filter((word) => word !== "");
 
-    const result = fuse.search(searchText.toLowerCase());
-    const score = result.length > 0 ? (result[0]!.score ?? 1) : 1;
+    // Create a Fuse instance for each target word
+    let totalScore = 0;
+    let matchedWords = 0;
+
+    for (const searchWord of searchWords) {
+      let bestWordScore = 0;
+
+      // Check against each word in the app name
+      for (const targetWord of [...appNameWords, ...customNameWords]) {
+        const fuse = new Fuse([{ word: targetWord }], {
+          ...options,
+          keys: ["word"],
+        });
+
+        const result = fuse.search(searchWord);
+        if (result.length > 0) {
+          const wordScore = 1 - (result[0]!.score ?? 1);
+          bestWordScore = Math.max(bestWordScore, wordScore);
+        }
+      }
+
+      if (bestWordScore > 0) {
+        totalScore += bestWordScore;
+        matchedWords++;
+      }
+    }
+
+    const finalScore = matchedWords > 0 ? totalScore / searchWords.length : 0;
+
     return {
-      passes: result.length > 0,
-      score: 1 - score,
+      passes:
+        searchText.includes(" ") && !app.name.includes(" ") && !preferences.customNames[app.id]?.includes(" ")
+          ? false
+          : matchedWords === searchWords.length, // All search words must match
+      score: finalScore,
     };
   }
 
@@ -336,14 +370,6 @@ export default function Command() {
       })),
       // TODO: Add custom tags for searching
       {
-        tag: {
-          value: app.type,
-          color: Color.Blue,
-        },
-        tooltip: app.type,
-      },
-
-      {
         icon:
           app.type === "website" && settings.showIdentifierForWebsitesAndDirectories
             ? { source: Icon.Globe, tintColor: Color.SecondaryText }
@@ -375,7 +401,7 @@ export default function Command() {
     ];
 
     const title = preferences.customNames[app.id] || app.name;
-    const subtitle = title === app.name ? "" : app.name; /* + "\t" + "i".repeat(70) */
+    const subtitle = title === app.name ? "" : app.name;
     const getPrimaryActionTitle = () => {
       if (app.type === "directory" && preferences.customDirectoryOpeners[app.id]) {
         const a = preferences.customDirectoryOpeners[app.id];
@@ -390,9 +416,12 @@ export default function Command() {
       return `Open in browser`;
     };
 
+    const a = preferences.cachedIconDirectories[app.id]?.custom || app.icon;
+    const iconString = typeof a === "object" ? ("fileIcon" in a ? a.fileIcon.toString() : a.source.toString()) : a;
+
     return (
       <List.Item
-        icon={!settings.fastMode ? (app.icon ?? Icon.Window) : undefined}
+        icon={!settings.fastMode ? app.icon : undefined}
         title={title}
         subtitle={subtitle}
         accessories={Accessories}
@@ -572,6 +601,7 @@ export default function Command() {
                   <EditOpenable
                     startCondition={{
                       ...app,
+                      icon: iconString,
                       name: preferences.customNames[app.id] || app.name,
                     }}
                     gatherOpeners={() => getOpeners(app)}
@@ -635,14 +665,19 @@ export default function Command() {
                   <EditTags
                     currentTags={[
                       {
-                        title: "Test",
+                        title: "Generic",
                         icon: Icon.Hashtag,
                         color: Color.Blue,
                       },
                       {
-                        title: "Test 2",
-                        icon: Icon.Hashtag,
-                        color: Color.Blue,
+                        title: "Favorite",
+                        icon: Icon.Star,
+                        color: Color.Yellow,
+                      },
+                      {
+                        title: "Love",
+                        icon: Icon.Heart,
+                        color: Color.Red,
                       },
                     ]}
                     onSubmit={() => {}}
@@ -661,9 +696,9 @@ export default function Command() {
                         let icon: Image.ImageLike;
                         if (type === "website") {
                           const result = await fetch(path + "/favicon.ico").catch(() => ({ ok: false }));
-                          icon = result.ok ? path + "/favicon.ico" : { source: Icon.Globe };
+                          icon = result.ok ? path + "/favicon.ico" : Icon.Globe;
                         } else {
-                          icon = { source: Icon.Folder };
+                          icon = Icon.Folder;
                         }
                         const soonToBeOpenables: Openable[] = [
                           ...(type === "website" ? websites : directories),

@@ -11,43 +11,7 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { Openable } from "./imports";
-const pathTypes = ["Emoji", "File Path", "Url", "Raycast Icon"] as const;
-
-function isEmoji(text: string): boolean {
-  return /\p{Emoji}/u.test(text);
-}
-
-async function isValidUrl(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, { method: "HEAD" });
-
-    if (!res.ok) return false;
-
-    return res.headers.get("Content-Type")?.startsWith("image") ?? false;
-  } catch (error) {
-    return false;
-  }
-}
-
-function isValidFileType(file: string) {
-  const validFileTypes = [".png", "Icon?", ".icns"];
-  return validFileTypes.some((value) => file.endsWith(value));
-}
-
-function getIconType(icon: Image.ImageLike): (typeof pathTypes)[number] {
-  const iconString = icon as string;
-  if (iconString.startsWith("https://")) {
-    return "Url";
-  }
-  if (isEmoji(iconString)) {
-    return "Emoji";
-  }
-  if (Object.keys(Icon).includes(iconString)) {
-    return "Raycast Icon";
-  }
-  return "File Path";
-}
+import { getIconType, isEmoji, isValidFileType, isValidUrl, Openable, pathTypes } from "./imports";
 
 type ChangedValues = {
   name?: string;
@@ -62,6 +26,7 @@ export default function EditOpenable(props: {
   defaultOpener: string;
 }) {
   const { startCondition, onSave, gatherOpeners, defaultOpener } = props;
+  // console.log("startCondition", startCondition);
   const [changedValues, setChangedValues] = useState<ChangedValues>({});
   const { pop } = useNavigation();
   const [iconType, setIconType] = useState<(typeof pathTypes)[number]>();
@@ -73,6 +38,11 @@ export default function EditOpenable(props: {
       setOpeners(openers);
     });
   }, []);
+
+  function fixRaycastIconName(input: string) {
+    const a = input.slice(0, input.lastIndexOf("-")).split("-");
+    return a.map((b) => b.charAt(0).toUpperCase() + b.slice(1)).join("");
+  }
 
   function getIcon(type: (typeof pathTypes)[number]) {
     switch (type) {
@@ -139,10 +109,6 @@ export default function EditOpenable(props: {
           id="emoji"
           title="Emoji"
           onChange={(input) => {
-            for (const char of input) {
-              console.log("char:", char);
-            }
-            console.log("input & is emoji:", input, isEmoji(input), input.length);
             if (input.length !== 2 || !isEmoji(input)) {
               setError("Can only be one emoji!");
               return;
@@ -207,7 +173,7 @@ export default function EditOpenable(props: {
             setError("");
             setChangedValues({ ...changedValues, icon: Icon[icon as keyof typeof Icon] });
           }}
-          defaultValue={startCondition.icon as string}
+          defaultValue={fixRaycastIconName(startCondition.icon as string)}
           error={error}
         >
           {Object.keys(Icon).map((icon) => (
