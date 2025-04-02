@@ -17,9 +17,7 @@ import {
 import Fuse from "fuse.js";
 import fetch from "node-fetch";
 import { useEffect, useMemo, useState } from "react";
-import AddTag from "./AddTag";
 import EditOpenable from "./EditOpenable";
-import EditTags from "./EditTags";
 import {
   AppPreferences,
   asyncGetAppIcon,
@@ -649,41 +647,6 @@ export default function Command() {
                 )
               }
               shortcut={{ modifiers: ["cmd"], key: "e" }}
-            />
-            <Action
-              title="Add Tag"
-              icon={Icon.Tag}
-              onAction={async () => {
-                push(<AddTag onSubmit={() => {}} />);
-              }}
-            />
-            <Action
-              title="Edit All Tags"
-              icon={Icon.Pencil}
-              onAction={async () => {
-                push(
-                  <EditTags
-                    currentTags={[
-                      {
-                        title: "Generic",
-                        icon: Icon.Hashtag,
-                        color: Color.Blue,
-                      },
-                      {
-                        title: "Favorite",
-                        icon: Icon.Star,
-                        color: Color.Yellow,
-                      },
-                      {
-                        title: "Love",
-                        icon: Icon.Heart,
-                        color: Color.Red,
-                      },
-                    ]}
-                    onSubmit={() => {}}
-                  />,
-                );
-              }}
             />
             <ActionPanel.Section title={"General"}>
               <Action
