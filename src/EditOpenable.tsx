@@ -13,7 +13,7 @@ import {
 import { useEffect, useState } from "react";
 import { getIconType, isEmoji, isValidFileType, isValidUrl, Openable, pathTypes } from "./imports";
 
-type ChangedValues = {
+export type ChangedValues = {
   name?: string;
   icon?: Image.ImageLike;
   opener?: string;
@@ -61,7 +61,7 @@ export default function EditOpenable(props: {
     onSave(changedValues);
     showToast({
       style: Toast.Style.Success,
-      title: `${startCondition.name} updated!`,
+      title: `${changedValues.name} updated!`,
     });
     pop();
   }

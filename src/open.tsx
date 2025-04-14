@@ -17,7 +17,7 @@ import {
 import Fuse from "fuse.js";
 import fetch from "node-fetch";
 import { useEffect, useMemo, useState } from "react";
-import EditOpenable from "./EditOpenable";
+import EditOpenable, { ChangedValues } from "./EditOpenable";
 import {
   AppPreferences,
   asyncGetAppIcon,
@@ -604,20 +604,24 @@ export default function Command() {
                     }}
                     gatherOpeners={() => getOpeners(app)}
                     defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
-                    onSave={async (changedValues) => {
+                    onSave={async (changedValues: ChangedValues) => {
                       if (changedValues.name) {
                         if (app.type === "app") {
-                          preferences.customNames[app.id] = changedValues.name;
-                          app.name = changedValues.name;
-                          setPreferences(preferences);
-                          await LocalStorage.setItem("appPreferences", JSON.stringify(preferences));
+                          const newPreferences = { ...preferences };
+                          newPreferences.customNames[app.id] = changedValues.name;
+                          setPreferences(newPreferences);
+                          await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
                         } else {
                           if (app.type === "website") {
                             websites.find((website) => website.id === app.id)!.name = changedValues.name;
+                            const newPreferences = { ...preferences };
+                            newPreferences.customNames[app.id] = changedValues.name;
                             setWebsites(websites);
                             await LocalStorage.setItem("websites", JSON.stringify(websites));
                           } else {
                             directories.find((directory) => directory.id === app.id)!.name = changedValues.name;
+                            const newPreferences = { ...preferences };
+                            newPreferences.customNames[app.id] = changedValues.name;
                             setDirectories(directories);
                             await LocalStorage.setItem("directories", JSON.stringify(directories));
                           }
