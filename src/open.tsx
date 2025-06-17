@@ -295,6 +295,20 @@ export default function Command() {
     }
   }
 
+  async function toggleShowingHiddenOpenables() {
+    const newPreferences = { ...preferences };
+    newPreferences.showHidden = !newPreferences.showHidden;
+    setPreferences(newPreferences);
+    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+  }
+
+  async function togglePrioritizeRunningApps() {
+    const newPreferences = { ...preferences };
+    newPreferences.prioritizeRunningApps = !newPreferences.prioritizeRunningApps;
+    setPreferences(newPreferences);
+    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+  }
+
   async function toggle(type: ToggleableAppPreferences, bundleId: string) {
     const newPreferences = { ...preferences };
     switch (type) {
@@ -357,29 +371,410 @@ export default function Command() {
     LocalStorage.setItem("hitHistory", JSON.stringify(newHitHistory));
   }
 
+  const GeneralActions = () => {
+    return (
+      <ActionPanel.Section title="General">
+        <Action
+          title="Add Website / File Directory"
+          icon={Icon.Plus}
+          onAction={() =>
+            push(
+              <NewOpenable
+                onSave={async (name, path, type, opener) => {
+                  let icon: Image.ImageLike;
+                  if (type === "website") {
+                    const result = await fetch(path + "/favicon.ico").catch(() => ({ ok: false }));
+                    icon = result.ok ? path + "/favicon.ico" : Icon.Globe;
+                  } else {
+                    icon = Icon.Folder;
+                  }
+                  const soonToBeOpenables: Openable[] = [
+                    ...(type === "website" ? websites : directories),
+                    {
+                      id: path,
+                      name: name,
+                      path: path,
+                      running: false,
+                      icon: icon,
+                      type: type,
+                    },
+                  ];
+                  if (opener) {
+                    const newPreferences = { ...preferences };
+                    newPreferences.customDirectoryOpeners[path] = opener;
+                    setPreferences(newPreferences);
+                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                  }
+                  if (type === "website") {
+                    setWebsites(soonToBeOpenables);
+                    await LocalStorage.setItem("websites", JSON.stringify(soonToBeOpenables));
+                  } else {
+                    setDirectories(soonToBeOpenables);
+                    await LocalStorage.setItem("directories", JSON.stringify(soonToBeOpenables));
+                  }
+                }}
+              />,
+            )
+          }
+          shortcut={{ modifiers: ["cmd"], key: "n" }}
+        />
+        <Action
+          title={preferences.showHidden ? "Don't Show Hidden Apps" : "Show All Hidden Apps"}
+          icon={preferences.showHidden ? Icon.EyeDisabled : Icon.Eye}
+          onAction={toggleShowingHiddenOpenables}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "h" }}
+        />
+        {!settings.fastMode && (
+          <Action
+            title={preferences.prioritizeRunningApps ? "Don't Prioritize Running Apps" : "Prioritize Running Apps"}
+            icon={Icon.ChevronUpDown}
+            onAction={togglePrioritizeRunningApps}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+          />
+        )}
+        <Action
+          title="Reset Frecency Values"
+          icon={Icon.Clock}
+          onAction={async () => {
+            if (
+              await confirmAlert({
+                title: "Are you sure?",
+                message:
+                  "This will reset all frecency values which will affect the sorting of apps. This cannot be undone.",
+                primaryAction: {
+                  title: "Reset",
+                  style: Alert.ActionStyle.Destructive,
+                },
+                dismissAction: {
+                  title: "Cancel",
+                  style: Alert.ActionStyle.Cancel,
+                },
+              })
+            ) {
+              setHitHistory({});
+              LocalStorage.setItem("hitHistory", JSON.stringify({}));
+              showToast({
+                style: Toast.Style.Success,
+                title: "Frecency values reset",
+              });
+            }
+          }}
+        />
+        <Action
+          title="Clear Icon Cache"
+          icon={Icon.Trash}
+          onAction={() => {
+            LocalStorage.setItem("appPreferences", JSON.stringify({ ...preferences, cachedIconDirectories: {} }));
+            setPreferences({ ...preferences, cachedIconDirectories: {} });
+          }}
+        />
+      </ActionPanel.Section>
+    );
+  };
+
+  const CloseAppAction = ({ app }: { app: Openable }) => {
+    return (
+      app.running && (
+        <Action
+          title={`Close ${app.type}`}
+          icon={Icon.XMarkCircle}
+          onAction={async () => {
+            setAppRunningStatus(app, false);
+            try {
+              setIsLoading(true);
+              await runTerminalCommand(`osascript -e 'tell application "${app.name}" to quit'`);
+              setIsLoading(false);
+            } catch (error) {
+              await showToast({
+                style: Toast.Style.Failure,
+                title: `Failed to close ${app.type}`,
+                message: String(error),
+              });
+            }
+          }}
+          shortcut={{ modifiers: ["ctrl"], key: "x" }}
+        />
+      )
+    );
+  };
+
+  const OpenAppAction = ({ app }: { app: Openable }) => {
+    function getPrimaryActionTitle() {
+      if (app.type === "directory" && preferences.customDirectoryOpeners[app.id]) {
+        return `Open with ${preferences.customDirectoryOpeners[app.id]}`;
+      }
+      if (app.running) {
+        return `Switch to tab`;
+      }
+      if (app.type === "app") {
+        return `Open app`;
+      }
+      return `Open in browser`;
+    }
+
+    return (
+      <Action.Open
+        title={getPrimaryActionTitle()}
+        target={app.path}
+        application={
+          app.type === "directory" && preferences.customDirectoryOpeners[app.id]
+            ? preferences.customDirectoryOpeners[app.id]
+            : "default"
+        }
+        icon={Icon.AppWindow}
+        onOpen={() => {
+          setAppRunningStatus(app, true);
+          incrementFrecency(app);
+        }}
+      />
+    );
+  };
+
+  const PinAppAction = ({ app }: { app: Openable }) => {
+    return (
+      <Action
+        title={preferences.pinnedApps.includes(app.id) ? "Unpin" : "Pin"}
+        icon={preferences.pinnedApps.includes(app.id) ? Icon.PinDisabled : Icon.Pin}
+        onAction={() => toggle("pinnedApps", app.id)}
+        shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+      />
+    );
+  };
+
+  const HideAppAction = ({ app }: { app: Openable }) => {
+    return (
+      <Action
+        title={preferences.hidden.includes(app.id) ? "Un-hide" : "Hide"}
+        icon={preferences.hidden.includes(app.id) ? Icon.Eye : Icon.EyeDisabled}
+        onAction={() => toggle("hidden", app.id)}
+        shortcut={{ modifiers: ["cmd"], key: "h" }}
+      />
+    );
+  };
+
+  const RemoveCustomIconAction = ({ app }: { app: Openable }) => {
+    return (
+      preferences.cachedIconDirectories[app.id]?.custom && (
+        <Action
+          title="Remove Custom Icon"
+          icon={Icon.Trash}
+          onAction={async () => {
+            console.log("App", preferences.cachedIconDirectories[app.id]);
+            const newPreferences = { ...preferences };
+            newPreferences.cachedIconDirectories[app.id] = {
+              default: newPreferences.cachedIconDirectories[app.id].default,
+              custom: null,
+            };
+            app.icon = newPreferences.cachedIconDirectories[app.id].default;
+            setPreferences(newPreferences);
+            await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+          }}
+        />
+      )
+    );
+  };
+
+  const IgnoreRunningStatusAction = ({ app }: { app: Openable }) => {
+    return (
+      !settings.fastMode &&
+      app.type === "app" && (
+        <Action
+          title={
+            preferences.appsWithoutRunningCheck.includes(app.id) ? "Check Running Status" : "Ignore Running Status"
+          }
+          icon={preferences.appsWithoutRunningCheck.includes(app.id) ? Icon.Bolt : Icon.BoltDisabled}
+          onAction={() => toggle("appsWithoutRunningCheck", app.id)}
+          shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+        />
+      )
+    );
+  };
+
+  const RemoveCustomNameAction = ({ app }: { app: Openable }) => {
+    return (
+      preferences.customNames[app.id] && (
+        <Action
+          title="Remove Custom Name"
+          icon={Icon.XMarkCircle}
+          onAction={async () => {
+            const newPreferences = { ...preferences };
+            delete newPreferences.customNames[app.id];
+            setPreferences(newPreferences);
+            await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+            showToast({
+              style: Toast.Style.Success,
+              title: "Custom name for " + app.name + " removed",
+            });
+          }}
+        />
+      )
+    );
+  };
+
+  const DeleteWebsiteOrDirectoryAction = ({ app }: { app: Openable }) => {
+    return (
+      app.type !== "app" && (
+        <Action
+          title="Delete"
+          icon={Icon.Trash}
+          onAction={async () => {
+            if (
+              await confirmAlert({
+                title: "Are you sure?",
+                message: `This will delete the ${app.type} from the list of things you can open and reset the frecency value.`,
+                primaryAction: {
+                  title: "Delete",
+                  style: Alert.ActionStyle.Destructive,
+                },
+              })
+            ) {
+              if (app.type === "website") {
+                const newWebsites = websites.filter((website) => website.id !== app.id);
+                setWebsites(newWebsites);
+                LocalStorage.setItem("websites", JSON.stringify(newWebsites));
+              } else {
+                const newDirectories = directories.filter((directory) => directory.id !== app.id);
+                setDirectories(newDirectories);
+                LocalStorage.setItem("directories", JSON.stringify(newDirectories));
+              }
+              for (const option of Object.keys(preferences)) {
+                const key = option as keyof AppPreferences;
+                if (Array.isArray(preferences[key])) {
+                  (preferences[key] as string[]) = (preferences[key] as string[]).filter((id) => id !== app.id);
+                } else if (typeof preferences[key] === "object" && preferences[key] !== null) {
+                  delete (preferences[key] as Record<string, unknown>)[app.id];
+                }
+              }
+              setPreferences(preferences);
+              await LocalStorage.setItem("appPreferences", JSON.stringify(preferences));
+              showToast({
+                style: Toast.Style.Success,
+                title: `"${app.name}" has been deleted!`,
+              });
+            }
+          }}
+          shortcut={{ modifiers: ["ctrl"], key: "x" }}
+        />
+      )
+    );
+  };
+
+  const RefreshAppIconAction = ({ app }: { app: Openable }) => {
+    return (
+      app.type === "app" && (
+        <Action
+          title="Refresh App Icon"
+          icon={Icon.ArrowCounterClockwise}
+          onAction={async () => {
+            setIsLoading(true);
+            const newIconPath = await asyncGetAppIcon({
+              appPath: app.path,
+              appName: app.name,
+              checkCache: false,
+            });
+            const newPreferences = preferences;
+            newPreferences.cachedIconDirectories[app.id] = {
+              default: newIconPath,
+              custom: newPreferences.cachedIconDirectories[app.id].custom,
+            };
+            setPreferences(newPreferences);
+            app.icon = newIconPath;
+            await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+            setIsLoading(false);
+          }}
+        />
+      )
+    );
+  };
+
+  const EditOpenableAction = ({ app }: { app: Openable }) => {
+    const icon = preferences.cachedIconDirectories[app.id]?.custom || app.icon;
+    const iconString =
+      typeof icon === "object" ? ("fileIcon" in icon ? icon.fileIcon.toString() : icon.source.toString()) : icon;
+
+    return (
+      <Action
+        title="Edit"
+        icon={Icon.Pencil}
+        onAction={() =>
+          push(
+            <EditOpenable
+              startCondition={{
+                ...app,
+                icon: iconString,
+                name: preferences.customNames[app.id] || app.name,
+              }}
+              gatherOpeners={() => getOpeners(app)}
+              defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
+              onSave={async (changedValues: ChangedValues) => {
+                if (changedValues.name) {
+                  if (app.type === "app") {
+                    const newPreferences = { ...preferences };
+                    newPreferences.customNames[app.id] = changedValues.name;
+                    setPreferences(newPreferences);
+                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                  } else {
+                    if (app.type === "website") {
+                      websites.find((website) => website.id === app.id)!.name = changedValues.name;
+                      const newPreferences = { ...preferences };
+                      newPreferences.customNames[app.id] = changedValues.name;
+                      setWebsites(websites);
+                      await LocalStorage.setItem("websites", JSON.stringify(websites));
+                    } else {
+                      directories.find((directory) => directory.id === app.id)!.name = changedValues.name;
+                      const newPreferences = { ...preferences };
+                      newPreferences.customNames[app.id] = changedValues.name;
+                      setDirectories(directories);
+                      await LocalStorage.setItem("directories", JSON.stringify(directories));
+                    }
+                  }
+                }
+                if (changedValues.icon) {
+                  const newPreferences = { ...preferences };
+                  if (!newPreferences.cachedIconDirectories[app.id]) {
+                    newPreferences.cachedIconDirectories[app.id] = {
+                      default: app.icon,
+                      custom: null,
+                    };
+                  }
+                  newPreferences.cachedIconDirectories[app.id].custom = changedValues.icon;
+                  setPreferences(newPreferences);
+                  app.icon = changedValues.icon;
+                  await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                }
+                if (changedValues.opener) {
+                  const newPreferences = { ...preferences };
+                  newPreferences.customDirectoryOpeners[app.id] = changedValues.opener;
+                  setPreferences(newPreferences);
+                  await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+                }
+              }}
+            />,
+          )
+        }
+        shortcut={{ modifiers: ["cmd"], key: "e" }}
+      />
+    );
+  };
+
+  const QuickLookAction = ({ app }: { app: Openable }) => {
+    return app.type === "directory" && <Action.ToggleQuickLook title="Open Directory" icon={Icon.MagnifyingGlass} />;
+  };
+
   const AppItem = ({ app }: { app: Openable }) => {
     const Accessories: List.Item.Accessory[] = [
       ...Object.keys(preferences.appTags[app.id] ?? {}).map((tag) => ({
-        tag: {
-          value: tag,
-          color: Color.Blue,
-        },
+        tag: tag,
         tooltip: tag,
       })),
       // TODO: Add custom tags for searching
       {
-        icon:
-          app.type === "website" && settings.showIdentifierForWebsitesAndDirectories
-            ? { source: Icon.Globe, tintColor: Color.SecondaryText }
-            : undefined,
+        icon: app.type === "website" && settings.showIdentifierForWebsitesAndDirectories ? Icon.Globe : undefined,
         tooltip: app.type === "website" ? "Website" : undefined,
       },
       {
-        icon:
-          app.type === "directory" && settings.showIdentifierForWebsitesAndDirectories
-            ? { source: Icon.Folder, tintColor: Color.Blue }
-            : undefined,
-        tooltip: app.type === "directory" ? "File" : undefined,
+        icon: app.type === "directory" && settings.showIdentifierForWebsitesAndDirectories ? Icon.Folder : undefined,
+        tooltip: app.type === "directory" ? "Directory" : undefined,
       },
       {
         icon: preferences.hidden.includes(app.id) && settings.showEyeIconForHiddenApps ? Icon.EyeDisabled : undefined,
@@ -394,28 +789,12 @@ export default function Command() {
           app.running && !settings.fastMode && settings.showBoltIconForRunningApps
             ? { source: Icon.Bolt, tintColor: Color.Green }
             : undefined,
-        tooltip: app.running ? "Running" : "Not Running",
+        tooltip: "Running app",
       },
     ];
 
     const title = preferences.customNames[app.id] || app.name;
     const subtitle = title === app.name ? "" : app.name;
-    const getPrimaryActionTitle = () => {
-      if (app.type === "directory" && preferences.customDirectoryOpeners[app.id]) {
-        const a = preferences.customDirectoryOpeners[app.id];
-        return `Open with ${a}`;
-      }
-      if (app.running) {
-        return `Switch to tab`;
-      }
-      if (app.type === "app") {
-        return `Open app`;
-      }
-      return `Open in browser`;
-    };
-
-    const a = preferences.cachedIconDirectories[app.id]?.custom || app.icon;
-    const iconString = typeof a === "object" ? ("fileIcon" in a ? a.fileIcon.toString() : a.source.toString()) : a;
 
     return (
       <List.Item
@@ -426,332 +805,20 @@ export default function Command() {
         quickLook={{ path: app.path, name: title }}
         actions={
           <ActionPanel>
-            <Action.Open
-              title={getPrimaryActionTitle()}
-              target={app.path}
-              application={
-                app.type === "directory" && preferences.customDirectoryOpeners[app.id]
-                  ? preferences.customDirectoryOpeners[app.id]
-                  : "default"
-              }
-              icon={Icon.AppWindow}
-              onOpen={() => {
-                setAppRunningStatus(app, true);
-                incrementFrecency(app);
-              }}
-            />
-            {app.running && (
-              <Action
-                title={`Close ${app.type}`}
-                icon={Icon.XMarkCircle}
-                onAction={async () => {
-                  setAppRunningStatus(app, false);
-                  try {
-                    setIsLoading(true);
-                    await runTerminalCommand(`osascript -e 'tell application "${app.name}" to quit'`);
-                    setIsLoading(false);
-                  } catch (error) {
-                    await showToast({
-                      style: Toast.Style.Failure,
-                      title: `Failed to close ${app.type}`,
-                      message: String(error),
-                    });
-                  }
-                }}
-                shortcut={{ modifiers: ["ctrl"], key: "x" }}
-              />
-            )}
-            <ActionPanel.Submenu title={"App Specific"} icon={Icon.CircleEllipsis}>
-              <Action
-                title={preferences.pinnedApps.includes(app.id) ? "Unpin" : "Pin"}
-                icon={preferences.pinnedApps.includes(app.id) ? Icon.PinDisabled : Icon.Pin}
-                onAction={() => toggle("pinnedApps", app.id)}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
-              />
-              {!preferences.pinnedApps.includes(app.id) && (
-                <Action
-                  title={preferences.hidden.includes(app.id) ? "Un-hide" : "Hide"}
-                  icon={preferences.hidden.includes(app.id) ? Icon.Eye : Icon.EyeDisabled}
-                  onAction={() => toggle("hidden", app.id)}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "h" }}
-                />
-              )}
-              {preferences.cachedIconDirectories[app.id]?.custom && (
-                <Action
-                  title="Remove Custom Icon"
-                  icon={Icon.Trash}
-                  onAction={async () => {
-                    console.log("App", preferences.cachedIconDirectories[app.id]);
-                    const newPreferences = { ...preferences };
-                    newPreferences.cachedIconDirectories[app.id] = {
-                      default: newPreferences.cachedIconDirectories[app.id].default,
-                      custom: null,
-                    };
-                    app.icon = newPreferences.cachedIconDirectories[app.id].default;
-                    setPreferences(newPreferences);
-                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                  }}
-                />
-              )}
-              {!settings.fastMode && app.type === "app" && (
-                <Action
-                  title={
-                    preferences.appsWithoutRunningCheck.includes(app.id)
-                      ? "Check Running Status"
-                      : "Ignore Running Status"
-                  }
-                  icon={preferences.appsWithoutRunningCheck.includes(app.id) ? Icon.Bolt : Icon.BoltDisabled}
-                  onAction={() => toggle("appsWithoutRunningCheck", app.id)}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
-                />
-              )}
-              {preferences.customNames[app.id] && (
-                <Action
-                  title="Remove Custom Name"
-                  icon={Icon.XMarkCircle}
-                  onAction={async () => {
-                    const newPreferences = { ...preferences };
-                    delete newPreferences.customNames[app.id];
-                    setPreferences(newPreferences);
-                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                    showToast({
-                      style: Toast.Style.Success,
-                      title: "Custom name for " + app.name + " removed",
-                    });
-                  }}
-                />
-              )}
-              {app.type === "directory" && (
-                <Action.ToggleQuickLook title="Open Directory" icon={Icon.MagnifyingGlass} />
-              )}
-              {app.type !== "app" && (
-                <Action
-                  title="Delete"
-                  icon={Icon.Trash}
-                  onAction={async () => {
-                    if (
-                      await confirmAlert({
-                        title: "Are you sure?",
-                        message: `This will delete the ${app.type} from the list of things you can open and reset the frecency value.`,
-                        primaryAction: {
-                          title: "Delete",
-                          style: Alert.ActionStyle.Destructive,
-                        },
-                      })
-                    ) {
-                      if (app.type === "website") {
-                        const newWebsites = websites.filter((website) => website.id !== app.id);
-                        setWebsites(newWebsites);
-                        LocalStorage.setItem("websites", JSON.stringify(newWebsites));
-                      } else {
-                        const newDirectories = directories.filter((directory) => directory.id !== app.id);
-                        setDirectories(newDirectories);
-                        LocalStorage.setItem("directories", JSON.stringify(newDirectories));
-                      }
-                      for (const option of Object.keys(preferences)) {
-                        const key = option as keyof AppPreferences;
-                        if (Array.isArray(preferences[key])) {
-                          (preferences[key] as string[]) = (preferences[key] as string[]).filter((id) => id !== app.id);
-                        } else if (typeof preferences[key] === "object" && preferences[key] !== null) {
-                          delete (preferences[key] as Record<string, unknown>)[app.id];
-                        }
-                      }
-                      setPreferences(preferences);
-                      await LocalStorage.setItem("appPreferences", JSON.stringify(preferences));
-                      showToast({
-                        style: Toast.Style.Success,
-                        title: `"${app.name}" has been deleted!`,
-                      });
-                    }
-                  }}
-                  shortcut={{ modifiers: ["ctrl"], key: "x" }}
-                />
-              )}
-              {app.type === "app" && (
-                <Action
-                  title="Refresh App Icon"
-                  icon={Icon.ArrowCounterClockwise}
-                  onAction={async () => {
-                    setIsLoading(true);
-                    const newIconPath = await asyncGetAppIcon({
-                      appPath: app.path,
-                      appName: app.name,
-                      checkCache: false,
-                    });
-                    const newPreferences = preferences;
-                    newPreferences.cachedIconDirectories[app.id] = {
-                      default: newIconPath,
-                      custom: newPreferences.cachedIconDirectories[app.id].custom,
-                    };
-                    setPreferences(newPreferences);
-                    app.icon = newIconPath;
-                    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                    setIsLoading(false);
-                  }}
-                />
-              )}
-            </ActionPanel.Submenu>
-            <Action
-              title="Edit"
-              icon={Icon.Pencil}
-              onAction={() =>
-                push(
-                  <EditOpenable
-                    startCondition={{
-                      ...app,
-                      icon: iconString,
-                      name: preferences.customNames[app.id] || app.name,
-                    }}
-                    gatherOpeners={() => getOpeners(app)}
-                    defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
-                    onSave={async (changedValues: ChangedValues) => {
-                      if (changedValues.name) {
-                        if (app.type === "app") {
-                          const newPreferences = { ...preferences };
-                          newPreferences.customNames[app.id] = changedValues.name;
-                          setPreferences(newPreferences);
-                          await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                        } else {
-                          if (app.type === "website") {
-                            websites.find((website) => website.id === app.id)!.name = changedValues.name;
-                            const newPreferences = { ...preferences };
-                            newPreferences.customNames[app.id] = changedValues.name;
-                            setWebsites(websites);
-                            await LocalStorage.setItem("websites", JSON.stringify(websites));
-                          } else {
-                            directories.find((directory) => directory.id === app.id)!.name = changedValues.name;
-                            const newPreferences = { ...preferences };
-                            newPreferences.customNames[app.id] = changedValues.name;
-                            setDirectories(directories);
-                            await LocalStorage.setItem("directories", JSON.stringify(directories));
-                          }
-                        }
-                      }
-                      if (changedValues.icon) {
-                        const newPreferences = { ...preferences };
-                        if (!newPreferences.cachedIconDirectories[app.id]) {
-                          newPreferences.cachedIconDirectories[app.id] = {
-                            default: app.icon,
-                            custom: null,
-                          };
-                        }
-                        newPreferences.cachedIconDirectories[app.id].custom = changedValues.icon;
-                        setPreferences(newPreferences);
-                        app.icon = changedValues.icon;
-                        await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                      }
-                      if (changedValues.opener) {
-                        const newPreferences = { ...preferences };
-                        newPreferences.customDirectoryOpeners[app.id] = changedValues.opener;
-                        setPreferences(newPreferences);
-                        await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                      }
-                    }}
-                  />,
-                )
-              }
-              shortcut={{ modifiers: ["cmd"], key: "e" }}
-            />
-            <ActionPanel.Section title={"General"}>
-              <Action
-                title="Add Website / File Directory"
-                icon={Icon.Plus}
-                onAction={() =>
-                  push(
-                    <NewOpenable
-                      onSave={async (name, path, type, opener) => {
-                        let icon: Image.ImageLike;
-                        if (type === "website") {
-                          const result = await fetch(path + "/favicon.ico").catch(() => ({ ok: false }));
-                          icon = result.ok ? path + "/favicon.ico" : Icon.Globe;
-                        } else {
-                          icon = Icon.Folder;
-                        }
-                        const soonToBeOpenables: Openable[] = [
-                          ...(type === "website" ? websites : directories),
-                          {
-                            id: path,
-                            name: name,
-                            path: path,
-                            running: false,
-                            icon: icon,
-                            type: type,
-                          },
-                        ];
-                        if (opener) {
-                          const newPreferences = { ...preferences };
-                          newPreferences.customDirectoryOpeners[path] = opener;
-                          setPreferences(newPreferences);
-                          await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
-                        }
-                        if (type === "website") {
-                          setWebsites(soonToBeOpenables);
-                          await LocalStorage.setItem("websites", JSON.stringify(soonToBeOpenables));
-                        } else {
-                          setDirectories(soonToBeOpenables);
-                          await LocalStorage.setItem("directories", JSON.stringify(soonToBeOpenables));
-                        }
-                      }}
-                    />,
-                  )
-                }
-                shortcut={{ modifiers: ["cmd"], key: "n" }}
-              />
-              <Action
-                title={preferences.showHidden ? "Don't Show Hidden Apps" : "Show All Hidden Apps"}
-                icon={preferences.showHidden ? Icon.EyeDisabled : Icon.Eye}
-                onAction={() => toggle("showHidden", app.id)}
-                shortcut={{ modifiers: ["cmd", "shift"], key: "h" }}
-              />
-              {!settings.fastMode && (
-                <Action
-                  title={
-                    preferences.prioritizeRunningApps ? "Don't Prioritize Running Apps" : "Prioritize Running Apps"
-                  }
-                  icon={Icon.ChevronUpDown}
-                  onAction={() => toggle("prioritizeRunningApps", app.id)}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
-                />
-              )}
+            <ActionPanel.Section title="App Specific">
+              <OpenAppAction app={app} />
+              <CloseAppAction app={app} />
+              <EditOpenableAction app={app} />
+              <DeleteWebsiteOrDirectoryAction app={app} />
+              <PinAppAction app={app} />
+              <HideAppAction app={app} />
+              <QuickLookAction app={app} />
+              <IgnoreRunningStatusAction app={app} />
+              <RemoveCustomIconAction app={app} />
+              <RemoveCustomNameAction app={app} />
+              <RefreshAppIconAction app={app} />
             </ActionPanel.Section>
-            <ActionPanel.Section title={"Destructive"}>
-              <Action
-                title="Reset Frecency Values"
-                icon={Icon.Clock}
-                onAction={async () => {
-                  if (
-                    await confirmAlert({
-                      title: "Are you sure?",
-                      message:
-                        "This will reset all frecency values which will affect the sorting of apps. This cannot be undone.",
-                      primaryAction: {
-                        title: "Reset",
-                        style: Alert.ActionStyle.Destructive,
-                      },
-                      dismissAction: {
-                        title: "Cancel",
-                        style: Alert.ActionStyle.Cancel,
-                      },
-                    })
-                  ) {
-                    setHitHistory({});
-                    LocalStorage.setItem("hitHistory", JSON.stringify({}));
-                    showToast({
-                      style: Toast.Style.Success,
-                      title: "Frecency values reset",
-                    });
-                  }
-                }}
-              />
-              <Action
-                title="Clear Icon Cache"
-                icon={Icon.Trash}
-                onAction={() => {
-                  LocalStorage.setItem("appPreferences", JSON.stringify({ ...preferences, cachedIconDirectories: {} }));
-                  setPreferences({ ...preferences, cachedIconDirectories: {} });
-                }}
-              />
-            </ActionPanel.Section>
+            <GeneralActions />
           </ActionPanel>
         }
       />
@@ -779,6 +846,11 @@ export default function Command() {
           </List.Dropdown>
         ) : null
       }
+      actions={
+        <ActionPanel>
+          <GeneralActions />
+        </ActionPanel>
+      }
     >
       <List.Section title="Pinned Apps">
         {pins.map((app) => (
@@ -802,27 +874,3 @@ export default function Command() {
     </List>
   );
 }
-
-// onAction={() => {
-//   for (const option of Object.keys(preferences)) {
-//     const key = option as keyof AppPreferences;
-//     if (
-//       Array.isArray(preferences[key]) &&
-//       (preferences[key] as string[]).length > 0 &&
-//       (preferences[key] as string[]).includes(app.id)
-//     ) {
-//       console.log(
-//         "Preference (",
-//         key,
-//         ")",
-//         (preferences[key] as string[]).find((id) => id === app.id),
-//       );
-//     } else if (
-//       typeof preferences[key] === "object" &&
-//       preferences[key] !== null &&
-//       Object.keys(preferences[key]).includes(app.id)
-//     ) {
-//       console.log("Preference (", key, ")", (preferences[key] as Record<string, unknown>)[app.id]);
-//     }
-//   }
-// }}
