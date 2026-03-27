@@ -769,14 +769,6 @@ export default function Command() {
       })),
       // TODO: Add custom tags for searching
       {
-        icon: app.type === "website" && settings.showIdentifierForWebsitesAndDirectories ? Icon.Globe : undefined,
-        tooltip: app.type === "website" ? "Website" : undefined,
-      },
-      {
-        icon: app.type === "directory" && settings.showIdentifierForWebsitesAndDirectories ? Icon.Folder : undefined,
-        tooltip: app.type === "directory" ? "Directory" : undefined,
-      },
-      {
         icon: preferences.hidden.includes(app.id) && settings.showEyeIconForHiddenApps ? Icon.EyeDisabled : undefined,
         tooltip: preferences.hidden.includes(app.id) ? "Hidden" : undefined,
       },
@@ -785,11 +777,13 @@ export default function Command() {
         tooltip: preferences.pinnedApps.includes(app.id) ? "Pinned" : undefined,
       },
       {
-        icon:
-          app.running && !settings.fastMode && settings.showBoltIconForRunningApps
-            ? { source: Icon.Bolt, tintColor: Color.Green }
-            : undefined,
-        tooltip: "Running app",
+        icon: {
+          source: app.type === "app" ? Icon.AppWindow : app.type === "directory" ? Icon.Finder : Icon.Globe,
+          tintColor: app.running && settings.showBoltIconForRunningApps ? Color.Green : undefined,
+        },
+        tooltip: app.running
+          ? `Open ${app.type.charAt(0).toUpperCase() + app.type.slice(1)}`
+          : `${app.type.charAt(0).toUpperCase() + app.type.slice(1)}`,
       },
     ];
 
