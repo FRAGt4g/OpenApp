@@ -3,7 +3,7 @@ import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
 
-const ROOT_PATH = "/Users/miles/Code Projects/Personal/Raycast Commands/Extensions/app-search";
+const ROOT_PATH = "/Users/miles/Code_Projects/Personal/Raycast Commands/Extensions/app-search";
 
 export async function runTerminalCommand(command: string) {
   const { stdout, stderr } = await promisify(exec)(command);

@@ -10,6 +10,7 @@ import {
   Image,
   List,
   LocalStorage,
+  open,
   showToast,
   Toast,
   useNavigation,
@@ -842,6 +843,20 @@ export default function Command() {
       }
       actions={
         <ActionPanel>
+          {searchText.length > 0 && (
+            <ActionPanel.Section title="Search">
+              {/* Do nothing, stop accidental searches while results are still loading */}
+              <Action title={`Do Nothing`} icon={Icon.XMarkCircle} onAction={async () => {}} />
+              <Action
+                title={`Search "${searchText}" on the Web`}
+                icon={Icon.Globe}
+                onAction={async () => {
+                  const url = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
+                  await open(url);
+                }}
+              />
+            </ActionPanel.Section>
+          )}
           <GeneralActions />
         </ActionPanel>
       }
