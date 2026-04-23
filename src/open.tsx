@@ -10,7 +10,6 @@ import {
   Image,
   List,
   LocalStorage,
-  open,
   showToast,
   Toast,
   useNavigation,
@@ -531,6 +530,17 @@ export default function Command() {
     );
   };
 
+  const SearchInBrowserAction = ({ searchText }: { searchText: string }) => {
+    return (
+      <Action.Open
+        title={`Search "${searchText}" in Browser`}
+        target={`https://www.google.com/search?q=${searchText}`}
+        application="default"
+        icon={Icon.Globe}
+      />
+    );
+  };
+
   const PinAppAction = ({ app }: { app: Openable }) => {
     return (
       <Action
@@ -802,6 +812,7 @@ export default function Command() {
           <ActionPanel>
             <ActionPanel.Section title="App Specific">
               <OpenAppAction app={app} />
+              {searchText.length > 0 && <SearchInBrowserAction searchText={searchText} />}
               <CloseAppAction app={app} />
               <EditOpenableAction app={app} />
               <DeleteWebsiteOrDirectoryAction app={app} />
@@ -847,14 +858,7 @@ export default function Command() {
             <ActionPanel.Section title="Search">
               {/* Do nothing, stop accidental searches while results are still loading */}
               <Action title={`Do Nothing`} icon={Icon.XMarkCircle} onAction={async () => {}} />
-              <Action
-                title={`Search "${searchText}" on the Web`}
-                icon={Icon.Globe}
-                onAction={async () => {
-                  const url = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
-                  await open(url);
-                }}
-              />
+              <SearchInBrowserAction searchText={searchText} />
             </ActionPanel.Section>
           )}
           <GeneralActions />
