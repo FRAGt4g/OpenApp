@@ -17,6 +17,7 @@ type ListStateContextType = {
   sortFunction: (a: Openable, b: Openable) => number;
   pins: Openable[];
   regular: Openable[];
+  notHidden: Openable[];
   hidden: Openable[];
   exactMatch: Openable | null;
 };
@@ -153,25 +154,31 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [calcFrecencyValue, passesSearchFilter, preferences.prioritizeRunningApps, sortType]);
 
-  const [pins, regular, hidden] = useMemo(
-    () => [
-      allOpenables
-        .filter((app) => preferences.pinnedApps.includes(app.id) && passesSearchFilter(app).passes)
-        .sort(sortFunction),
-      allOpenables
-        .filter(
-          (app) =>
-            !preferences.pinnedApps.includes(app.id) &&
-            passesSearchFilter(app).passes &&
-            !preferences.hidden.includes(app.id),
-        )
-        .sort(sortFunction),
-      allOpenables
-        .filter((app) => preferences.hidden.includes(app.id) && passesSearchFilter(app).passes)
-        .sort(sortFunction),
-    ],
-    [allOpenables, preferences, sortFunction, passesSearchFilter, sortType, searchText, hitHistory],
-  );
+  const { pins, regular, notHidden, hidden } = useMemo(() => {
+    const pins: Openable[] = [];
+    const regular: Openable[] = [];
+    const notHidden: Openable[] = [];
+    const hidden: Openable[] = [];
+
+    for (const app of allOpenables) {
+      if (!passesSearchFilter(app).passes) continue;
+      const isHidden = preferences.hidden.includes(app.id);
+      const isPinned = preferences.pinnedApps.includes(app.id);
+
+      if (isHidden) hidden.push(app);
+      else notHidden.push(app);
+
+      if (isPinned) pins.push(app);
+      else if (!isHidden) regular.push(app);
+    }
+
+    pins.sort(sortFunction);
+    regular.sort(sortFunction);
+    notHidden.sort(sortFunction);
+    hidden.sort(sortFunction);
+
+    return { pins, regular, notHidden, hidden };
+  }, [allOpenables, preferences, sortFunction, passesSearchFilter]);
 
   return (
     <ListStateContext.Provider
@@ -189,6 +196,7 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
         sortFunction,
         pins,
         regular,
+        notHidden,
         hidden,
         exactMatch,
       }}

@@ -88,7 +88,7 @@ function AppItem({ app }: { app: Openable }) {
   ];
 
   const title = preferences.customNames[app.id] || app.name;
-  const subtitle = title === app.name ? "" : app.name;
+  const subtitle = title !== app.name ? app.name : "";
 
   return (
     <List.Item

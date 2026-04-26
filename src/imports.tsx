@@ -167,3 +167,25 @@ export function getIconType(icon: Image.ImageLike): PathType {
   }
   return "Raycast Icon";
 }
+
+export function getNumberOfMilliseconds(
+  count: number,
+  timeScale: "seconds" | "minutes" | "hours" | "days" | "weeks" | "months" | "years",
+) {
+  switch (timeScale) {
+    case "seconds":
+      return count * 1000;
+    case "minutes":
+      return count * 60 * 1000;
+    case "hours":
+      return count * 60 * 60 * 1000;
+    case "days":
+      return count * 24 * 60 * 60 * 1000;
+    case "weeks":
+      return count * 7 * 24 * 60 * 60 * 1000;
+    case "months":
+      return count * 30 * 24 * 60 * 60 * 1000;
+    case "years":
+      return count * 365 * 24 * 60 * 60 * 1000;
+  }
+}

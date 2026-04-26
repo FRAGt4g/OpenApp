@@ -15,13 +15,14 @@ import { getIconType, isEmoji, isValidFileType, isValidUrl } from "./imports";
 import { Openable, PathType, pathTypes } from "./types";
 
 export type ChangedValues = {
-  name?: string;
+  nickname?: string;
+  defaultName?: string;
   icon?: Image.ImageLike;
   opener?: string;
 };
 
 export default function EditOpenable(props: {
-  startCondition: Openable;
+  startCondition: Openable & { defaultName: string };
   onSave: (updatedOpenable: ChangedValues) => void;
   gatherOpeners: () => Promise<Application[]>;
   defaultOpener: string;
@@ -61,7 +62,7 @@ export default function EditOpenable(props: {
     onSave(changedValues);
     showToast({
       style: Toast.Style.Success,
-      title: `${changedValues.name} updated!`,
+      title: `${changedValues.nickname} updated!`,
     });
     pop();
   }
@@ -74,20 +75,22 @@ export default function EditOpenable(props: {
         </ActionPanel>
       }
     >
-      {startCondition.type !== "app" && (
+      {startCondition.type !== "app" ? (
         <Form.TextField
           id="defaultName"
-          title="Default Name"
-          defaultValue={startCondition.name}
-          onChange={(value) => setChangedValues({ ...changedValues, name: value })}
+          title="Base Name"
+          defaultValue={startCondition.defaultName}
+          onChange={(value) => setChangedValues({ ...changedValues, defaultName: value })}
         />
+      ) : (
+        <Form.Description text={startCondition.defaultName} />
       )}
 
       <Form.TextField
         id="name"
-        title="New Name"
+        title="Nickname"
         defaultValue={startCondition.name}
-        onChange={(value) => setChangedValues({ ...changedValues, name: value })}
+        onChange={(value) => setChangedValues({ ...changedValues, nickname: value })}
         autoFocus
       />
 

@@ -1,6 +1,6 @@
 import { getApplications, getPreferenceValues as getSettings, LocalStorage } from "@raycast/api";
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { asyncGetAppIcon, getRunningApps } from "./imports";
+import { asyncGetAppIcon, getNumberOfMilliseconds, getRunningApps } from "./imports";
 import {
   AppPreferences,
   DeepSettings,
@@ -10,7 +10,7 @@ import {
   ToggleableAppPreferences,
 } from "./types";
 
-const FARTHEST_BACK_HIT_DATE = 1000 * 60 * 60 * 24 * 30; // 30 days
+const FARTHEST_BACK_HIT_DATE = getNumberOfMilliseconds(30, "days");
 
 type AppDataContextType = {
   settings: DeepSettings;

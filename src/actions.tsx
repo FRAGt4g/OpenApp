@@ -368,32 +368,32 @@ function EditOpenableAction({ app }: { app: Openable }) {
             startCondition={{
               ...app,
               icon: iconString,
-              name: preferences.customNames[app.id] || app.name,
+              name: preferences.customNames[app.id] ?? "",
+              defaultName: app.name,
             }}
             gatherOpeners={() => getOpeners(app)}
             defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
             onSave={async (changedValues: ChangedValues) => {
-              if (changedValues.name) {
-                if (app.type === "app") {
-                  const newPreferences = { ...preferences };
-                  newPreferences.customNames[app.id] = changedValues.name;
-                  setPreferences(newPreferences);
-                  await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+              if (changedValues.defaultName) {
+                if (app.type === "website") {
+                  websites.find((website) => website.id === app.id)!.name = changedValues.defaultName;
+                  setWebsites(websites);
+                  await LocalStorage.setItem("websites", JSON.stringify(websites));
                 } else {
-                  if (app.type === "website") {
-                    websites.find((website) => website.id === app.id)!.name = changedValues.name;
-                    const newPreferences = { ...preferences };
-                    newPreferences.customNames[app.id] = changedValues.name;
-                    setWebsites(websites);
-                    await LocalStorage.setItem("websites", JSON.stringify(websites));
-                  } else {
-                    directories.find((directory) => directory.id === app.id)!.name = changedValues.name;
-                    const newPreferences = { ...preferences };
-                    newPreferences.customNames[app.id] = changedValues.name;
-                    setDirectories(directories);
-                    await LocalStorage.setItem("directories", JSON.stringify(directories));
-                  }
+                  directories.find((directory) => directory.id === app.id)!.name = changedValues.defaultName;
+                  setDirectories(directories);
+                  await LocalStorage.setItem("directories", JSON.stringify(directories));
                 }
+              }
+              if (changedValues.nickname !== undefined) {
+                const newPreferences = { ...preferences };
+                if (changedValues.nickname === "") {
+                  delete newPreferences.customNames[app.id]; // remove the nickname
+                } else {
+                  newPreferences.customNames[app.id] = changedValues.nickname;
+                }
+                setPreferences(newPreferences);
+                await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
               }
               if (changedValues.icon) {
                 const newPreferences = { ...preferences };
