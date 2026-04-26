@@ -1,9 +1,10 @@
-import { Color, Image, Keyboard } from "@raycast/api";
+import { Image } from "@raycast/api";
 import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
+import { PathType } from "./types";
 
-const ROOT_PATH = "/Users/miles/Code Projects/Personal/Raycast Commands/Extensions/app-search";
+const ROOT_PATH = "/Users/miles/Code_Projects/Personal/Raycast Commands/Extensions/app-search";
 
 export async function runTerminalCommand(command: string) {
   const { stdout, stderr } = await promisify(exec)(command);
@@ -128,82 +129,63 @@ export async function asyncGetAppIcon({
   return await runSwiftCommand();
 }
 
-export type ToggleableAppPreferences =
-  | "pinnedApps"
-  | "hidden"
-  | "appsWithoutRunningCheck"
-  | "prioritizeRunningApps"
-  | "showHidden";
-
-export type SortType = "frecency" | "alphabetical" | "custom";
-
-export interface AppPreferences {
-  sortType: SortType;
-
-  quickCommands: Record<string, { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent }>;
-  cachedIconDirectories: Record<string, { default: Image.ImageLike; custom: Image.ImageLike | null }>;
-  customNames: Record<string, string>;
-  appImportance: Record<string, number>;
-  appTags: Record<string, string[]>;
-
-  appsWithoutRunningCheck: string[];
-  pinnedApps: string[];
-  hidden: string[];
-
-  prioritizeRunningApps: boolean;
-  showWebsites: boolean;
-  showHidden: boolean;
-
-  customDirectoryOpeners: Record<string, string>;
+export function isEmoji(text: string): boolean {
+  return /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/.test(text);
 }
 
-export const defaultPreferences: AppPreferences = {
-  sortType: "frecency",
+export async function isValidUrl(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
 
-  quickCommands: {},
-  cachedIconDirectories: {},
-  customNames: {},
-  appImportance: {},
-  appTags: {},
+    if (!res.ok) return false;
 
-  appsWithoutRunningCheck: [],
-  pinnedApps: [],
-  hidden: [],
-
-  prioritizeRunningApps: true,
-  showWebsites: true,
-  showHidden: false,
-
-  customDirectoryOpeners: {},
-};
-
-export interface HitHistory {
-  [key: string]: string[];
+    return res.headers.get("Content-Type")?.startsWith("image") ?? false;
+  } catch (error) {
+    return false;
+  }
 }
 
-export type Tag = {
-  title: string;
-  icon: Image.ImageLike;
-  color: Color.ColorLike;
-};
-
-export interface Openable {
-  type: "app" | "website" | "directory";
-  icon: Image.ImageLike;
-  running: boolean;
-  name: string;
-  path: string;
-  id: string;
+export function isValidFileType(file: string) {
+  const validFileTypes = [".png", "Icon?", ".icns"];
+  return validFileTypes.some((value) => file.endsWith(value));
 }
 
-export interface DeepSettings {
-  fuzzySearchThresholdDropdown: string;
-  showSortOptions: boolean;
-  lambdaDecayDropdown: string;
-  timeScaleDropdown: string;
-  fastMode: boolean;
-  showBoltIconForRunningApps: boolean;
-  showPinIconForPinnedApps: boolean;
-  showEyeIconForHiddenApps: boolean;
-  showIdentifierForWebsitesAndDirectories: boolean;
+export function looksLikeFilePath(text: string): boolean {
+  return /^(\/|~\/|[a-zA-Z]:\\|\.\/|\.\.\/)/.test(text);
+}
+
+export function getIconType(icon: Image.ImageLike): PathType {
+  const iconString = icon as string;
+  if (iconString?.startsWith("https://")) {
+    return "Url";
+  }
+  if (isEmoji(iconString)) {
+    return "Emoji";
+  }
+  if (looksLikeFilePath(iconString)) {
+    return "File Path";
+  }
+  return "Raycast Icon";
+}
+
+export function getNumberOfMilliseconds(
+  count: number,
+  timeScale: "seconds" | "minutes" | "hours" | "days" | "weeks" | "months" | "years",
+) {
+  switch (timeScale) {
+    case "seconds":
+      return count * 1000;
+    case "minutes":
+      return count * 60 * 1000;
+    case "hours":
+      return count * 60 * 60 * 1000;
+    case "days":
+      return count * 24 * 60 * 60 * 1000;
+    case "weeks":
+      return count * 7 * 24 * 60 * 60 * 1000;
+    case "months":
+      return count * 30 * 24 * 60 * 60 * 1000;
+    case "years":
+      return count * 365 * 24 * 60 * 60 * 1000;
+  }
 }
