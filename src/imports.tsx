@@ -1,7 +1,8 @@
-import { Color, Icon, Image, Keyboard } from "@raycast/api";
+import { Image } from "@raycast/api";
 import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
+import { PathType } from "./types";
 
 const ROOT_PATH = "/Users/miles/Code_Projects/Personal/Raycast Commands/Extensions/app-search";
 
@@ -128,55 +129,6 @@ export async function asyncGetAppIcon({
   return await runSwiftCommand();
 }
 
-export type ToggleableAppPreferences =
-  | "pinnedApps"
-  | "hidden"
-  | "appsWithoutRunningCheck"
-  | "prioritizeRunningApps"
-  | "showHidden";
-
-export type SortType = "frecency" | "alphabetical" | "custom";
-
-export interface AppPreferences {
-  sortType: SortType;
-
-  quickCommands: Record<string, { modifiers: Keyboard.KeyModifier[]; key: Keyboard.KeyEquivalent }>;
-  cachedIconDirectories: Record<string, { default: Image.ImageLike; custom: Image.ImageLike | null }>;
-  customNames: Record<string, string>;
-  appImportance: Record<string, number>;
-  appTags: Record<string, string[]>;
-
-  appsWithoutRunningCheck: string[];
-  pinnedApps: string[];
-  hidden: string[];
-
-  prioritizeRunningApps: boolean;
-  showWebsites: boolean;
-  showHidden: boolean;
-
-  customDirectoryOpeners: Record<string, string>;
-}
-
-export const defaultPreferences: AppPreferences = {
-  sortType: "frecency",
-
-  quickCommands: {},
-  cachedIconDirectories: {},
-  customNames: {},
-  appImportance: {},
-  appTags: {},
-
-  appsWithoutRunningCheck: [],
-  pinnedApps: [],
-  hidden: [],
-
-  prioritizeRunningApps: true,
-  showWebsites: true,
-  showHidden: false,
-
-  customDirectoryOpeners: {},
-};
-
 export function isEmoji(text: string): boolean {
   return /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/.test(text);
 }
@@ -202,8 +154,7 @@ export function looksLikeFilePath(text: string): boolean {
   return /^(\/|~\/|[a-zA-Z]:\\|\.\/|\.\.\/)/.test(text);
 }
 
-export const pathTypes = ["Emoji", "File Path", "Url", "Raycast Icon"] as const;
-export function getIconType(icon: Image.ImageLike): (typeof pathTypes)[number] {
+export function getIconType(icon: Image.ImageLike): PathType {
   const iconString = icon as string;
   if (iconString?.startsWith("https://")) {
     return "Url";
@@ -215,35 +166,4 @@ export function getIconType(icon: Image.ImageLike): (typeof pathTypes)[number] {
     return "File Path";
   }
   return "Raycast Icon";
-}
-
-export interface HitHistory {
-  [key: string]: string[];
-}
-
-export type Tag = {
-  title: string;
-  icon: Icon;
-  color: Color.ColorLike;
-};
-
-export interface Openable {
-  type: "app" | "website" | "directory";
-  icon: Image.ImageLike;
-  running: boolean;
-  name: string;
-  path: string;
-  id: string;
-}
-
-export interface DeepSettings {
-  fuzzySearchThresholdDropdown: string;
-  showSortOptions: boolean;
-  lambdaDecayDropdown: string;
-  timeScaleDropdown: string;
-  fastMode: boolean;
-  showBoltIconForRunningApps: boolean;
-  showPinIconForPinnedApps: boolean;
-  showEyeIconForHiddenApps: boolean;
-  showIdentifierForWebsitesAndDirectories: boolean;
 }

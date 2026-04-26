@@ -11,7 +11,8 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { getIconType, isEmoji, isValidFileType, isValidUrl, Openable, pathTypes } from "./imports";
+import { getIconType, isEmoji, isValidFileType, isValidUrl } from "./imports";
+import { Openable, PathType, pathTypes } from "./types";
 
 export type ChangedValues = {
   name?: string;
@@ -26,10 +27,9 @@ export default function EditOpenable(props: {
   defaultOpener: string;
 }) {
   const { startCondition, onSave, gatherOpeners, defaultOpener } = props;
-  // console.log("startCondition", startCondition);
   const [changedValues, setChangedValues] = useState<ChangedValues>({});
   const { pop } = useNavigation();
-  const [iconType, setIconType] = useState<(typeof pathTypes)[number]>();
+  const [iconType, setIconType] = useState<PathType>();
   const [error, setError] = useState("");
   const [openers, setOpeners] = useState<Application[]>([]);
 
@@ -74,6 +74,15 @@ export default function EditOpenable(props: {
         </ActionPanel>
       }
     >
+      {startCondition.type !== "app" && (
+        <Form.TextField
+          id="defaultName"
+          title="Default Name"
+          defaultValue={startCondition.name}
+          onChange={(value) => setChangedValues({ ...changedValues, name: value })}
+        />
+      )}
+
       <Form.TextField
         id="name"
         title="New Name"

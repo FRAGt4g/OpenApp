@@ -11,7 +11,8 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useState } from "react";
-import { isEmoji, isValidFileType, isValidUrl, pathTypes } from "./imports";
+import { isEmoji, isValidFileType, isValidUrl } from "./imports";
+import { pathTypes } from "./types";
 
 function getIcon(type: (typeof pathTypes)[number]) {
   switch (type) {
