@@ -1,15 +1,4 @@
-import {
-  Action,
-  ActionPanel,
-  Application,
-  Color,
-  Form,
-  Icon,
-  Image,
-  showToast,
-  Toast,
-  useNavigation,
-} from "@raycast/api";
+import { Action, ActionPanel, Application, Form, Icon, Image, showToast, Toast, useNavigation } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { getIconType, isEmoji, isValidFileType, isValidUrl } from "./imports";
 import { Openable, PathType, pathTypes } from "./types";
@@ -19,6 +8,7 @@ export type ChangedValues = {
   defaultName?: string;
   icon?: Image.ImageLike;
   opener?: string;
+  sourcePath?: string;
 };
 
 export default function EditOpenable(props: {
@@ -94,12 +84,25 @@ export default function EditOpenable(props: {
         autoFocus
       />
 
-      <Form.TagPicker id="tags" title="Tags">
-        <Form.TagPicker.Item value="test" title="Test" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
-        <Form.TagPicker.Item value="test2" title="Test2" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
-        <Form.TagPicker.Item value="test3" title="Test3" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
-        <Form.TagPicker.Item value="test4" title="Test4" icon={{ source: Icon.Tag, tintColor: Color.Blue }} />
-      </Form.TagPicker>
+      {startCondition.type === "directory" && (
+        <Form.FilePicker
+          id="newPath"
+          title="File path"
+          value={[changedValues.sourcePath || startCondition.path]}
+          onChange={(value) => setChangedValues({ ...changedValues, sourcePath: value[0] })}
+          allowMultipleSelection={false}
+          canChooseDirectories
+        />
+      )}
+      {startCondition.type === "website" && (
+        <Form.TextField
+          id="newWebsite"
+          title="Website"
+          defaultValue={startCondition.path}
+          onChange={(value) => setChangedValues({ ...changedValues, sourcePath: value })}
+          value={changedValues.sourcePath || startCondition.path}
+        />
+      )}
       <Form.Separator />
 
       <Form.Dropdown

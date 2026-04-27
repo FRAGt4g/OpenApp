@@ -374,6 +374,17 @@ function EditOpenableAction({ app }: { app: Openable }) {
             gatherOpeners={() => getOpeners(app)}
             defaultOpener={preferences.customDirectoryOpeners[app.id] ?? "Finder"}
             onSave={async (changedValues: ChangedValues) => {
+              if (changedValues.sourcePath) {
+                if (app.type === "website") {
+                  websites.find((website) => website.id === app.id)!.path = changedValues.sourcePath;
+                  setWebsites(websites);
+                  await LocalStorage.setItem("websites", JSON.stringify(websites));
+                } else {
+                  directories.find((directory) => directory.id === app.id)!.path = changedValues.sourcePath;
+                  setDirectories(directories);
+                  await LocalStorage.setItem("directories", JSON.stringify(directories));
+                }
+              }
               if (changedValues.defaultName) {
                 if (app.type === "website") {
                   websites.find((website) => website.id === app.id)!.name = changedValues.defaultName;
@@ -458,7 +469,12 @@ function QuickLookAction({ app }: { app: Openable }) {
   return app.type === "directory" && <Action.ToggleQuickLook title="Open Directory" icon={Icon.MagnifyingGlass} />;
 }
 
-/** All actions for a list row: app-specific, then General. */
+/**
+ *     + ––––––––––––––––––––––––––––––––––––––––––––– +
+ *     |     All General and App Specific Sections     |
+ *     + ––––––––––––––––––––––––––––––––––––––––––––– +
+ */
+
 export function AppSpecificActionsSection({ app }: { app: Openable }) {
   const { searchText } = useListState();
 
@@ -485,12 +501,6 @@ export function AppSpecificActionsSection({ app }: { app: Openable }) {
     </ActionPanel>
   );
 }
-
-/**
- *     + ––––––––––––––––––––––––––––––––––––––––––––– +
- *     |     All General and App Specific Sections     |
- *     + ––––––––––––––––––––––––––––––––––––––––––––– +
- */
 
 const GeneralQuickActionsSection = () => {
   const { searchText } = useListState();
