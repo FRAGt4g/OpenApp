@@ -1,8 +1,40 @@
-import { Image } from "@raycast/api";
+import { Color, Image, Keyboard } from "@raycast/api";
 import { exec } from "child_process";
 import fs, { readdirSync } from "fs";
 import { promisify } from "util";
 import { PathType } from "./types";
+
+const MODIFIER_SYMBOLS: Record<Keyboard.KeyModifier, string> = {
+  cmd: "⌘",
+  ctrl: "⌃",
+  opt: "⌥",
+  shift: "⇧",
+};
+
+const KEY_SYMBOLS: Partial<Record<Keyboard.KeyEquivalent, string>> = {
+  return: "↵",
+  enter: "↵",
+  delete: "⌫",
+  deleteForward: "⌦",
+  tab: "⇥",
+  space: "␣",
+  escape: "⎋",
+  arrowUp: "↑",
+  arrowDown: "↓",
+  arrowLeft: "←",
+  arrowRight: "→",
+  pageUp: "⇞",
+  pageDown: "⇟",
+  home: "↖",
+  end: "↘",
+};
+
+/** Render a keyboard shortcut as a compact, mac-style symbol string (e.g. "⌘⇧A"). */
+export function formatKeybind(shortcut: Keyboard.Shortcut): string {
+  const mods = shortcut.modifiers.map((modifier) => MODIFIER_SYMBOLS[modifier] ?? modifier).join("");
+  const key = KEY_SYMBOLS[shortcut.key] ?? shortcut.key.toUpperCase();
+  return `${mods}${key}`;
+}
 
 const ROOT_PATH = "/Users/miles/Code_Projects/Personal/Raycast Commands/Extensions/app-search";
 
@@ -155,6 +187,9 @@ export function looksLikeFilePath(text: string): boolean {
 }
 
 export function getIconType(icon: Image.ImageLike): PathType {
+  if (typeof icon !== "string") {
+    return "Raycast Icon";
+  }
   const iconString = icon as string;
   if (iconString?.startsWith("https://")) {
     return "Url";
@@ -188,4 +223,192 @@ export function getNumberOfMilliseconds(
     case "years":
       return count * 365 * 24 * 60 * 60 * 1000;
   }
+}
+
+export function justIcon(icon: Image.ImageLike | undefined | null): string | undefined | null {
+  if (!icon) return undefined;
+
+  if (typeof icon === "object") {
+    return (icon as { source: string }).source;
+  }
+  return icon;
+}
+
+export function validColor(color: string | Color.ColorLike): boolean {
+  // HEX: #RRGGBB or #RGB
+  const hexRegex = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
+
+  // RGB: rgb(255, 0, 0)
+  const rgbRegex = /^rgb\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*\)$/i;
+
+  // RGBA: rgba(255,0,0,1) or rgb(255,0,0,1.0)
+  const rgbaRegex = /^rgba?\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)$/i;
+
+  // HSL/HSLA: hsl(120,60%,50%) or hsla(120,60%,50%,0.5)
+  const hslRegex = /^hsla?\(\s*\d+\s*,\s*\d+%?\s*,\s*\d+%?\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/i;
+
+  // Keywords: CSS color names (subset of 140 named colors)
+  const cssKeywords = [
+    "black",
+    "silver",
+    "gray",
+    "white",
+    "maroon",
+    "red",
+    "purple",
+    "fuchsia",
+    "green",
+    "lime",
+    "olive",
+    "yellow",
+    "navy",
+    "blue",
+    "teal",
+    "aqua",
+    "orange",
+    "aliceblue",
+    "antiquewhite",
+    "aquamarine",
+    "azure",
+    "beige",
+    "bisque",
+    "blanchedalmond",
+    "blueviolet",
+    "brown",
+    "burlywood",
+    "cadetblue",
+    "chartreuse",
+    "chocolate",
+    "coral",
+    "cornflowerblue",
+    "cornsilk",
+    "crimson",
+    "cyan",
+    "darkblue",
+    "darkcyan",
+    "darkgoldenrod",
+    "darkgray",
+    "darkgreen",
+    "darkgrey",
+    "darkkhaki",
+    "darkmagenta",
+    "darkolivegreen",
+    "darkorange",
+    "darkorchid",
+    "darkred",
+    "darksalmon",
+    "darkseagreen",
+    "darkslateblue",
+    "darkslategray",
+    "darkslategrey",
+    "darkturquoise",
+    "darkviolet",
+    "deeppink",
+    "deepskyblue",
+    "dimgray",
+    "dimgrey",
+    "dodgerblue",
+    "firebrick",
+    "floralwhite",
+    "forestgreen",
+    "gainsboro",
+    "ghostwhite",
+    "gold",
+    "goldenrod",
+    "greenyellow",
+    "grey",
+    "honeydew",
+    "hotpink",
+    "indianred",
+    "indigo",
+    "ivory",
+    "khaki",
+    "lavender",
+    "lavenderblush",
+    "lawngreen",
+    "lemonchiffon",
+    "lightblue",
+    "lightcoral",
+    "lightcyan",
+    "lightgoldenrodyellow",
+    "lightgray",
+    "lightgreen",
+    "lightgrey",
+    "lightpink",
+    "lightsalmon",
+    "lightseagreen",
+    "lightskyblue",
+    "lightslategray",
+    "lightslategrey",
+    "lightsteelblue",
+    "lightyellow",
+    "limegreen",
+    "linen",
+    "magenta",
+    "mediumaquamarine",
+    "mediumblue",
+    "mediumorchid",
+    "mediumpurple",
+    "mediumseagreen",
+    "mediumslateblue",
+    "mediumspringgreen",
+    "mediumturquoise",
+    "mediumvioletred",
+    "midnightblue",
+    "mintcream",
+    "mistyrose",
+    "moccasin",
+    "navajowhite",
+    "oldlace",
+    "olivedrab",
+    "orangered",
+    "orchid",
+    "palegoldenrod",
+    "palegreen",
+    "paleturquoise",
+    "palevioletred",
+    "papayawhip",
+    "peachpuff",
+    "peru",
+    "pink",
+    "plum",
+    "powderblue",
+    "rosybrown",
+    "royalblue",
+    "saddlebrown",
+    "salmon",
+    "sandybrown",
+    "seagreen",
+    "seashell",
+    "sienna",
+    "skyblue",
+    "slateblue",
+    "slategray",
+    "slategrey",
+    "snow",
+    "springgreen",
+    "steelblue",
+    "tan",
+    "thistle",
+    "tomato",
+    "turquoise",
+    "violet",
+    "wheat",
+    "whitesmoke",
+    "yellowgreen",
+    "rebeccapurple",
+  ];
+
+  if (
+    typeof color === "string" &&
+    (hexRegex.test(color) ||
+      rgbRegex.test(color) ||
+      rgbaRegex.test(color) ||
+      hslRegex.test(color) ||
+      cssKeywords.includes(color.toLowerCase()) ||
+      Object.entries(Color).some((c) => c[0] === color))
+  ) {
+    return true;
+  }
+  return false;
 }

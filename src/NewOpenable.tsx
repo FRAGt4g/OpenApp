@@ -2,6 +2,7 @@ import {
   Action,
   ActionPanel,
   Application,
+  Color,
   Form,
   getApplications,
   Icon,
@@ -11,7 +12,7 @@ import {
   useNavigation,
 } from "@raycast/api";
 import { useState } from "react";
-import { isEmoji, isValidFileType, isValidUrl } from "./imports";
+import { isEmoji, isValidFileType, isValidUrl, justIcon, validColor } from "./imports";
 import { pathTypes } from "./types";
 
 function getIcon(type: (typeof pathTypes)[number]) {
@@ -47,11 +48,13 @@ export default function NewOpenable(props: {
   const [emojiIcon, setEmojiIcon] = useState<string | null>(null);
   const [filePathIcon, setFilePathIcon] = useState<string | null>(null);
   const [urlIcon, setUrlIcon] = useState<string | null>(null);
-  const [raycastIcon, setRaycastIcon] = useState<string | null>(null);
+  const [raycastIcon, setRaycastIcon] = useState<Image.ImageLike | null>(null);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
   const [opener, setOpener] = useState<string | null>(null);
   const [openers, setOpeners] = useState<Application[]>([]);
+  const [iconColor, setIconColor] = useState<Color.ColorLike>("PrimaryText");
+  const [iconColorError, setIconColorError] = useState("");
   const { pop } = useNavigation();
 
   const icon =
@@ -225,20 +228,48 @@ export default function NewOpenable(props: {
         />
       )}
       {iconType === "Raycast Icon" && (
-        <Form.Dropdown
-          id="raycastIcon"
-          title="Raycast Icon"
-          onChange={(icon: string) => {
-            setError("");
-            setRaycastIcon(icon);
-          }}
-          defaultValue={raycastIcon as string}
-          error={error}
-        >
-          {Object.keys(Icon).map((icon) => (
-            <Form.Dropdown.Item key={icon} value={icon} title={icon} icon={Icon[icon as keyof typeof Icon]} />
-          ))}
-        </Form.Dropdown>
+        <>
+          <Form.Dropdown
+            id="raycastIcon"
+            title="Raycast Icon"
+            onChange={(icon: string) => {
+              setError("");
+              setRaycastIcon({
+                source: icon,
+                tintColor: iconColor,
+              });
+            }}
+            defaultValue={raycastIcon as string}
+            error={error}
+          >
+            {Object.entries(Icon).map(([name, icon]) => (
+              <Form.Dropdown.Item
+                key={name}
+                value={icon}
+                title={name}
+                icon={{
+                  source: icon,
+                  tintColor: iconColor,
+                }}
+              />
+            ))}
+          </Form.Dropdown>
+          <Form.TextField
+            id="iconColor"
+            title="Icon Color"
+            info="Color can be any kind of valid CSS color (rgb, hex, name, etc.)"
+            onChange={(color: Color.ColorLike) => {
+              setIconColor(color);
+              setIconColorError(!validColor(color) ? "Invalid color!" : "");
+              setRaycastIcon({
+                source: justIcon(raycastIcon) as string,
+                tintColor: color,
+              });
+            }}
+            error={iconColorError}
+            value={iconColor as string}
+          />
+        </>
       )}
     </Form>
   );

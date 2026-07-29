@@ -232,6 +232,15 @@
       "type": "checkbox",
       "default": true,
       "required": false
+    },
+    {
+      "name": "showKeybindForApps",
+      "label": "Whether or not to show the keybind for apps with one assigned",
+      "title": "Show Keybinds",
+      "description": "Show the assigned keybind next to apps that have one in the list",
+      "type": "checkbox",
+      "default": true,
+      "required": false
     }
   ]
 }

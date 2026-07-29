@@ -10,8 +10,11 @@ export type Tag = {
   color: Color.ColorLike;
 };
 
+export type OpenableOrigin = "app" | "website" | "directory";
+export type OpenableFilter = OpenableOrigin | "all";
+
 export interface Openable {
-  type: "app" | "website" | "directory";
+  type: OpenableOrigin;
   icon: Image.ImageLike;
   running: boolean;
   name: string;
@@ -29,6 +32,7 @@ export interface DeepSettings {
   showPinIconForPinnedApps: boolean;
   showEyeIconForHiddenApps: boolean;
   showIdentifierForWebsitesAndDirectories: boolean;
+  showKeybindForApps: boolean;
 }
 
 export type ToggleableAppPreferences =

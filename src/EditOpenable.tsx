@@ -1,6 +1,17 @@
-import { Action, ActionPanel, Application, Form, Icon, Image, showToast, Toast, useNavigation } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Application,
+  Color,
+  Form,
+  Icon,
+  Image,
+  showToast,
+  Toast,
+  useNavigation,
+} from "@raycast/api";
 import { useEffect, useState } from "react";
-import { getIconType, isEmoji, isValidFileType, isValidUrl } from "./imports";
+import { getIconType, isEmoji, isValidFileType, isValidUrl, justIcon, validColor } from "./imports";
 import { Openable, PathType, pathTypes } from "./types";
 
 export type ChangedValues = {
@@ -23,17 +34,18 @@ export default function EditOpenable(props: {
   const [iconType, setIconType] = useState<PathType>();
   const [error, setError] = useState("");
   const [openers, setOpeners] = useState<Application[]>([]);
+  const [iconColor, setIconColor] = useState<Color.ColorLike>(
+    typeof startCondition.icon === "object"
+      ? (startCondition.icon as { tintColor: Color.ColorLike }).tintColor
+      : "PrimaryText",
+  );
+  const [iconColorError, setIconColorError] = useState("");
 
   useEffect(() => {
     gatherOpeners().then((openers) => {
       setOpeners(openers);
     });
   }, []);
-
-  function fixRaycastIconName(input: string) {
-    const a = input.slice(0, input.lastIndexOf("-")).split("-");
-    return a.map((b) => b.charAt(0).toUpperCase() + b.slice(1)).join("");
-  }
 
   function getIcon(type: (typeof pathTypes)[number]) {
     switch (type) {
@@ -98,7 +110,6 @@ export default function EditOpenable(props: {
         <Form.TextField
           id="newWebsite"
           title="Website"
-          defaultValue={startCondition.path}
           onChange={(value) => setChangedValues({ ...changedValues, sourcePath: value })}
           value={changedValues.sourcePath || startCondition.path}
         />
@@ -181,20 +192,55 @@ export default function EditOpenable(props: {
         />
       )}
       {iconType === "Raycast Icon" && (
-        <Form.Dropdown
-          id="raycastIcon"
-          title="Raycast Icon"
-          onChange={(icon: string) => {
-            setError("");
-            setChangedValues({ ...changedValues, icon: Icon[icon as keyof typeof Icon] });
-          }}
-          defaultValue={fixRaycastIconName(startCondition.icon as string)}
-          error={error}
-        >
-          {Object.keys(Icon).map((icon) => (
-            <Form.Dropdown.Item key={icon} value={icon} title={icon} icon={Icon[icon as keyof typeof Icon]} />
-          ))}
-        </Form.Dropdown>
+        <>
+          <Form.Dropdown
+            id="raycastIcon"
+            title="Raycast Icon"
+            onChange={(icon: string) => {
+              setError("");
+              setChangedValues({
+                ...changedValues,
+                icon: {
+                  source: icon,
+                  tintColor: iconColor,
+                },
+              });
+            }}
+            defaultValue={(startCondition.icon as { source: string }).source}
+            error={error}
+          >
+            {Object.entries(Icon).map(([name, icon]) => (
+              <Form.Dropdown.Item
+                key={name}
+                value={icon}
+                title={name}
+                icon={{
+                  source: icon,
+                  tintColor: iconColor,
+                }}
+              />
+            ))}
+          </Form.Dropdown>
+          <Form.TextField
+            id="iconColor"
+            title="Icon Color"
+            info="Color can be any kind of valid CSS color (rgb, hex, name, etc.)"
+            onChange={(color: string) => {
+              console.log("[color]", color);
+              setIconColor(color);
+              setIconColorError(!validColor(color) ? "Invalid color!" : "");
+              setChangedValues({
+                ...changedValues,
+                icon: {
+                  source: justIcon(changedValues.icon) as string,
+                  tintColor: color,
+                },
+              });
+            }}
+            value={iconColor as string}
+            error={iconColorError}
+          />
+        </>
       )}
 
       <Form.Separator />

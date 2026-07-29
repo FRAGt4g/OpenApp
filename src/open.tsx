@@ -1,12 +1,13 @@
 import { Color, Icon, List, LocalStorage } from "@raycast/api";
 import { AppSpecificActionsSection, RootListActionsSection } from "./actions";
 import { AppDataProvider, useAppData } from "./AppDataProvider";
+import { formatKeybind } from "./imports";
 import { ListStateProvider, useListState } from "./ListStateProvider";
-import { Openable } from "./types";
+import { Openable, OpenableFilter } from "./types";
 
 function OpenList() {
   const { preferences, isLoading, settings } = useAppData();
-  const { setSearchText, setSortType, pins, regular, hidden, exactMatch } = useListState();
+  const { setSearchText, setSortType, pins, regular, hidden, exactMatch, setFilterOpenablesBy } = useListState();
 
   return (
     <List
@@ -27,7 +28,21 @@ function OpenList() {
             <List.Dropdown.Item title="Frecency" value="frecency" icon={Icon.Clock} />
             <List.Dropdown.Item title="Alphabetical" value="alphabetical" icon={Icon.Text} />
           </List.Dropdown>
-        ) : null
+        ) : (
+          <List.Dropdown
+            tooltip="Openable Types To Show"
+            onChange={(value) => {
+              const newFilterOpenablesBy = value as OpenableFilter;
+              setFilterOpenablesBy(newFilterOpenablesBy);
+              void LocalStorage.setItem("filterOpenablesBy", newFilterOpenablesBy);
+            }}
+          >
+            <List.Dropdown.Item title="Everything" value="all" icon={Icon.AppWindowGrid2x2} />
+            <List.Dropdown.Item title="Apps" value="app" icon={Icon.AppWindow} />
+            <List.Dropdown.Item title="Websites" value="website" icon={Icon.Globe} />
+            <List.Dropdown.Item title="Directories" value="directory" icon={Icon.Finder} />
+          </List.Dropdown>
+        )
       }
       actions={<RootListActionsSection />}
     >
@@ -63,11 +78,21 @@ function OpenList() {
 function AppItem({ app }: { app: Openable }) {
   const { preferences, settings } = useAppData();
 
+  const keybind = preferences.quickCommands[app.id];
+
   const Accessories: List.Item.Accessory[] = [
     ...Object.keys(preferences.appTags[app.id] ?? {}).map((tag) => ({
       tag: tag,
       tooltip: tag,
     })),
+    ...(keybind && settings.showKeybindForApps
+      ? [
+          {
+            tag: { value: formatKeybind(keybind), color: Color.SecondaryText },
+            tooltip: `Keybind: ${formatKeybind(keybind)}`,
+          },
+        ]
+      : []),
     {
       icon: preferences.hidden.includes(app.id) && settings.showEyeIconForHiddenApps ? Icon.EyeDisabled : undefined,
       tooltip: preferences.hidden.includes(app.id) ? "Hidden" : undefined,

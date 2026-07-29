@@ -32,6 +32,9 @@ type AppDataContextType = {
   togglePrioritizeRunningApps: () => Promise<void>;
   toggle: (type: ToggleableAppPreferences, bundleId: string) => Promise<void>;
   getOpeners: (app: Openable) => ReturnType<typeof getApplications>;
+  updateStoredPreferences: (partialPreferences: Partial<AppPreferences>) => Promise<void>;
+  updateStoredWebsites: (websites: Openable[]) => Promise<void>;
+  updateStoredDirectories: (directories: Openable[]) => Promise<void>;
 };
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
@@ -62,7 +65,10 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
       if (unparsedWebsitesJSON) {
         try {
           parsedWebsites = JSON.parse(unparsedWebsitesJSON) as Openable[];
-          setWebsites(parsedWebsites);
+          parsedWebsites = parsedWebsites.map((website) => ({
+            ...website,
+            // icon: useableIcon(website.icon as string),
+          }));
         } catch (error) {
           console.error("Error loading websites:", error);
         }
@@ -71,12 +77,15 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
       if (unparsedDirectoriesJSON) {
         try {
           parsedDirectories = JSON.parse(unparsedDirectoriesJSON);
-          setDirectories(parsedDirectories);
+          parsedDirectories = parsedDirectories.map((directory) => ({
+            ...directory,
+          }));
         } catch (error) {
           console.error("Error loading directories:", error);
         }
       }
 
+      let hitHistoryState: HitHistory = {};
       if (unparsedHitHistoryJSON) {
         try {
           const parsedHitHistory: HitHistory = JSON.parse(unparsedHitHistoryJSON);
@@ -91,13 +100,11 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
             }
           }
 
-          LocalStorage.setItem("hitHistory", JSON.stringify(purgedHitHistory));
-          setHitHistory(purgedHitHistory);
+          void LocalStorage.setItem("hitHistory", JSON.stringify(purgedHitHistory));
+          hitHistoryState = purgedHitHistory;
         } catch (error) {
           console.error("Error loading hit history:", error);
         }
-      } else {
-        setHitHistory({});
       }
 
       let soonToBePreferences: AppPreferences = defaultPreferences;
@@ -110,16 +117,23 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
               parsedPreferences[key] ?? defaultPreferences[key as keyof AppPreferences],
             ]),
           ) as AppPreferences;
-          setPreferences(soonToBePreferences);
-          await LocalStorage.setItem("appPreferences", JSON.stringify(soonToBePreferences));
         } catch (error) {
           console.error("Error loading preferences:", error);
         }
       }
 
+      const fallbackWebsites: Openable[] = parsedWebsites.map((website) => ({
+        ...website,
+        type: "website" as const,
+      }));
+      const fallbackDirectories: Openable[] = parsedDirectories.map((directory) => ({
+        ...directory,
+        type: "directory" as const,
+      }));
+
       try {
         const runningApps = !settings.fastMode ? await getRunningApps() : new Set();
-        const imagePaths = soonToBePreferences.cachedIconDirectories;
+        const imagePaths = { ...soonToBePreferences.cachedIconDirectories };
         if (!settings.fastMode) {
           for (const app of apps) {
             if (!imagePaths[app.bundleId!]) {
@@ -131,17 +145,15 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
             }
           }
         }
-        setPreferences({ ...soonToBePreferences, cachedIconDirectories: imagePaths });
-        await LocalStorage.setItem(
-          "appPreferences",
-          JSON.stringify({ ...soonToBePreferences, cachedIconDirectories: imagePaths }),
-        );
+        const finalPreferences = { ...soonToBePreferences, cachedIconDirectories: imagePaths };
+        await LocalStorage.setItem("appPreferences", JSON.stringify(finalPreferences));
+
         const cleanedApplications: Openable[] = apps.map((app) => ({
           id: app.bundleId!,
           name: app.path.split("/").pop()!.replace(".app", ""),
           path: app.path,
           running: runningApps.has(app.name) && !soonToBePreferences.appsWithoutRunningCheck.includes(app.bundleId!),
-          icon: imagePaths[app.bundleId!].custom ?? imagePaths[app.bundleId!].default,
+          icon: imagePaths[app.bundleId!]!.custom ?? imagePaths[app.bundleId!]!.default,
           type: "app" as const,
         }));
         const cleanedWebsites: Openable[] = parsedWebsites.map((website) => ({
@@ -155,11 +167,18 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
           type: "directory" as const,
         }));
 
+        setPreferences(finalPreferences);
         setApplications(cleanedApplications);
         setWebsites(cleanedWebsites);
         setDirectories(cleanedDirectories);
+        setHitHistory(hitHistoryState);
       } catch (error) {
         console.error("Error fetching applications:", error);
+        setPreferences(soonToBePreferences);
+        setApplications([]);
+        setWebsites(fallbackWebsites);
+        setDirectories(fallbackDirectories);
+        setHitHistory(hitHistoryState);
       }
 
       setIsLoading(false);
@@ -238,11 +257,30 @@ export const AppDataProvider = ({ children }: { children: ReactNode }) => {
     return getApplications(app.path);
   }
 
+  async function updateStoredPreferences(partialPreferences: Partial<AppPreferences>) {
+    const newPreferences = { ...preferences, ...partialPreferences };
+    setPreferences(newPreferences);
+    await LocalStorage.setItem("appPreferences", JSON.stringify(newPreferences));
+  }
+
+  async function updateStoredWebsites(websites: Openable[]) {
+    setWebsites(websites);
+    await LocalStorage.setItem("websites", JSON.stringify(websites));
+  }
+
+  async function updateStoredDirectories(directories: Openable[]) {
+    setDirectories(directories);
+    await LocalStorage.setItem("directories", JSON.stringify(directories));
+  }
+
   return (
     <AppDataContext.Provider
       value={{
         settings,
         isLoading,
+        updateStoredPreferences,
+        updateStoredWebsites,
+        updateStoredDirectories,
         setIsLoading,
         preferences,
         setPreferences,

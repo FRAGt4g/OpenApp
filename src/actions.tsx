@@ -4,7 +4,6 @@ import {
   Alert,
   confirmAlert,
   Icon,
-  Image,
   LocalStorage,
   showToast,
   Toast,
@@ -13,9 +12,10 @@ import {
 import fetch from "node-fetch";
 import { useAppData } from "./AppDataProvider";
 import EditOpenable, { ChangedValues } from "./EditOpenable";
-import { asyncGetAppIcon, runTerminalCommand } from "./imports";
+import { asyncGetAppIcon, getIconType, runTerminalCommand } from "./imports";
 import { useListState } from "./ListStateProvider";
 import NewOpenable from "./NewOpenable";
+import SetKeybind from "./SetKeybind";
 import { AppPreferences, Openable } from "./types";
 
 /**
@@ -23,6 +23,48 @@ import { AppPreferences, Openable } from "./types";
  *     |     All General and App Specific Actions     |
  *     + –––––––––––––––––––––––––––––––––––––––––––– +
  */
+async function debug(
+  websites: Openable[],
+  directories: Openable[],
+  updateStoredWebsites: (websites: Openable[]) => Promise<void>,
+  updateStoredDirectories: (directories: Openable[]) => Promise<void>,
+) {
+  const newWebsites = websites;
+  const newDirectories = directories;
+  for (const website of websites) {
+    if (getIconType(website.icon) === "Raycast Icon") {
+      website.icon = JSON.stringify({
+        source: website.icon,
+        tintColor: "PrimaryText",
+      });
+    }
+  }
+  for (const directory of directories) {
+    if (getIconType(directory.icon) === "Raycast Icon") {
+      directory.icon = JSON.stringify({
+        source: directory.icon,
+        tintColor: "PrimaryText",
+      });
+    }
+  }
+  await updateStoredWebsites(newWebsites);
+  await updateStoredDirectories(newDirectories);
+}
+
+export const DebugAction = () => {
+  const { websites, directories, updateStoredWebsites, updateStoredDirectories } = useAppData();
+
+  return (
+    <Action
+      title="Debug"
+      icon={Icon.Bug}
+      onAction={() => {
+        debug(websites, directories, updateStoredWebsites, updateStoredDirectories);
+      }}
+    />
+  );
+};
+
 export const AddWebsiteOrDirectoryAction = () => {
   const { push } = useNavigation();
   const { preferences, setPreferences, websites, setWebsites, directories, setDirectories } = useAppData();
@@ -34,13 +76,14 @@ export const AddWebsiteOrDirectoryAction = () => {
       onAction={() =>
         push(
           <NewOpenable
-            onSave={async (name, path, type, opener) => {
-              let icon: Image.ImageLike;
-              if (type === "website") {
-                const result = await fetch(path + "/favicon.ico").catch(() => ({ ok: false }));
-                icon = result.ok ? path + "/favicon.ico" : Icon.Globe;
-              } else {
-                icon = Icon.Folder;
+            onSave={async (name, path, type, opener, icon) => {
+              if (!icon) {
+                if (type === "website") {
+                  const result = await fetch(path + "/favicon.ico").catch(() => ({ ok: false }));
+                  icon = result.ok ? path + "/favicon.ico" : Icon.Globe;
+                } else {
+                  icon = Icon.Folder;
+                }
               }
               const soonToBeOpenables: Openable[] = [
                 ...(type === "website" ? websites : directories),
@@ -350,13 +393,97 @@ function RefreshAppIconAction({ app }: { app: Openable }) {
   );
 }
 
+function SetKeybindAction({ app }: { app: Openable }) {
+  const { preferences, updateStoredPreferences } = useAppData();
+  const { push } = useNavigation();
+  const existing = preferences.quickCommands[app.id];
+
+  return (
+    <Action
+      title={existing ? "Change Keybind" : "Set Keybind"}
+      icon={Icon.Keyboard}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
+      onAction={() =>
+        push(
+          <SetKeybind
+            appName={preferences.customNames[app.id] || app.name}
+            initial={existing}
+            onSave={async (shortcut) => {
+              await updateStoredPreferences({
+                quickCommands: { ...preferences.quickCommands, [app.id]: shortcut },
+              });
+            }}
+          />,
+        )
+      }
+    />
+  );
+}
+
+function RemoveKeybindAction({ app }: { app: Openable }) {
+  const { preferences, updateStoredPreferences } = useAppData();
+  return (
+    !!preferences.quickCommands[app.id] && (
+      <Action
+        title="Remove Keybind"
+        icon={Icon.XMarkCircle}
+        onAction={async () => {
+          const newQuickCommands = { ...preferences.quickCommands };
+          delete newQuickCommands[app.id];
+          await updateStoredPreferences({ quickCommands: newQuickCommands });
+          showToast({
+            style: Toast.Style.Success,
+            title: `Keybind for ${preferences.customNames[app.id] || app.name} removed`,
+          });
+        }}
+      />
+    )
+  );
+}
+
+/**
+ * Renders an open action for every openable that has a keybind assigned, each bound to its
+ * shortcut. Including this in every item's panel makes the keybinds work no matter which item
+ * is currently selected, turning them into list-wide quick commands.
+ */
+function QuickCommandsSection() {
+  const { preferences, setAppRunningStatus, incrementFrecency } = useAppData();
+  const { allOpenables } = useListState();
+
+  const boundApps = allOpenables.filter((app) => preferences.quickCommands[app.id]);
+  if (boundApps.length === 0) return null;
+
+  return (
+    <ActionPanel.Section title="Keybinds">
+      {boundApps.map((app) => {
+        const useCustomOpener = app.type === "directory" && !!preferences.customDirectoryOpeners[app.id];
+        const title = preferences.customNames[app.id] || app.name;
+        return (
+          <Action.Open
+            key={app.id}
+            title={`Open ${title}`}
+            target={app.path}
+            application={useCustomOpener ? preferences.customDirectoryOpeners[app.id] : "default"}
+            icon={app.icon}
+            shortcut={preferences.quickCommands[app.id]}
+            onOpen={() => {
+              setAppRunningStatus(app, true);
+              incrementFrecency(app);
+            }}
+          />
+        );
+      })}
+    </ActionPanel.Section>
+  );
+}
+
 function EditOpenableAction({ app }: { app: Openable }) {
   const { preferences, setPreferences, websites, setWebsites, directories, setDirectories, getOpeners } = useAppData();
   const { push } = useNavigation();
 
   const icon = preferences.cachedIconDirectories[app.id]?.custom || app.icon;
-  const iconString =
-    typeof icon === "object" ? ("fileIcon" in icon ? icon.fileIcon.toString() : icon.source.toString()) : icon;
+  // const iconString =
+  //   typeof icon === "object" ? ("fileIcon" in icon ? icon.fileIcon.toString() : icon.source.toString()) : icon;
 
   return (
     <Action
@@ -367,7 +494,7 @@ function EditOpenableAction({ app }: { app: Openable }) {
           <EditOpenable
             startCondition={{
               ...app,
-              icon: iconString,
+              icon: icon,
               name: preferences.customNames[app.id] ?? "",
               defaultName: app.name,
             }}
@@ -408,6 +535,7 @@ function EditOpenableAction({ app }: { app: Openable }) {
               }
               if (changedValues.icon) {
                 const newPreferences = { ...preferences };
+                console.log("[changedValues.icon]", changedValues.icon);
                 if (!newPreferences.cachedIconDirectories[app.id]) {
                   newPreferences.cachedIconDirectories[app.id] = {
                     default: app.icon,
@@ -491,12 +619,15 @@ export function AppSpecificActionsSection({ app }: { app: Openable }) {
         <DeleteWebsiteOrDirectoryAction app={app} />
         <PinAppAction app={app} />
         <HideAppAction app={app} />
+        <SetKeybindAction app={app} />
+        <RemoveKeybindAction app={app} />
         <QuickLookAction app={app} />
         <IgnoreRunningStatusAction app={app} />
         <RemoveCustomIconAction app={app} />
         <RemoveCustomNameAction app={app} />
         <RefreshAppIconAction app={app} />
       </ActionPanel.Section>
+      <QuickCommandsSection />
       <GeneralActionsSection />
     </ActionPanel>
   );
@@ -505,19 +636,19 @@ export function AppSpecificActionsSection({ app }: { app: Openable }) {
 const GeneralQuickActionsSection = () => {
   const { searchText } = useListState();
 
-  if (searchText.length !== 0)
-    return (
-      <ActionPanel.Section title="Quick Actions">
-        <Action title="Do Nothing" icon={Icon.XMarkCircle} onAction={async () => {}} />
-        <SearchInBrowserAction searchText={searchText} />
-      </ActionPanel.Section>
-    );
+  return (
+    <ActionPanel.Section title="Quick Actions">
+      <Action title="Do Nothing" icon={Icon.XMarkCircle} onAction={async () => {}} />
+      <SearchInBrowserAction searchText={searchText} />
+    </ActionPanel.Section>
+  );
 };
 
 export function RootListActionsSection() {
   return (
     <ActionPanel>
       <GeneralQuickActionsSection />
+      <QuickCommandsSection />
       <GeneralActionsSection />
     </ActionPanel>
   );
@@ -531,6 +662,7 @@ export function GeneralActionsSection() {
       <TogglePrioritizeRunningAppsAction />
       <ResetFrecencyValuesAction />
       <ClearIconCacheAction />
+      {/* <DebugAction /> */}
     </ActionPanel.Section>
   );
 }

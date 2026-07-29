@@ -1,7 +1,7 @@
 import Fuse from "fuse.js";
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { useAppData } from "./AppDataProvider";
-import { Openable, SortType } from "./types";
+import { Openable, OpenableFilter, SortType } from "./types";
 
 type ListStateContextType = {
   searchText: string;
@@ -20,14 +20,21 @@ type ListStateContextType = {
   notHidden: Openable[];
   hidden: Openable[];
   exactMatch: Openable | null;
+  filterOpenablesBy: OpenableFilter;
+  setFilterOpenablesBy: (o: OpenableFilter) => void;
 };
 
 const ListStateContext = createContext<ListStateContextType | undefined>(undefined);
+
+const MILLISECONDS_PER_HOUR = 3600000;
+const FREQUENCY_HIT_WEIGHT = 0.85;
+const RECENCY_HIT_WEIGHT = 0.15;
 
 export const ListStateProvider = ({ children }: { children: ReactNode }) => {
   const { settings, preferences, applications, websites, directories, hitHistory } = useAppData();
   const [searchText, setSearchText] = useState("");
   const [sortType, setSortType] = useState<SortType>("frecency");
+  const [filterOpenablesBy, setFilterOpenablesBy] = useState<OpenableFilter>("all");
 
   const [lambdaDecay, fuzzySearchThreshold, timeScale] = useMemo(
     () => [
@@ -55,8 +62,8 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
     );
   }, [allOpenables, searchText, preferences]);
 
-  const passesSearchFilter = useMemo(() => {
-    return function passesSearchFilterImpl(app: Openable): { passes: boolean; score: number } {
+  const passesSearchFilter = useCallback(
+    (app: Openable): { passes: boolean; score: number } => {
       if (!searchText) return { passes: true, score: 1 };
 
       const options = {
@@ -115,21 +122,24 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
             : matchedWords === searchWords.length,
         score: finalScore,
       };
-    };
-  }, [searchText, fuzzySearchThreshold, preferences]);
+    },
+    [searchText, fuzzySearchThreshold, preferences],
+  );
 
   const calcFrecencyValue = useMemo(() => {
     return function calcFrecencyValueImpl(appId: string) {
       const now = new Date();
-      return (
-        hitHistory[appId]?.reduce((total, timestamp) => {
-          const millisecondsToHours = 3600000;
-          return (
-            total +
-            Math.exp(-lambdaDecay * ((now.getTime() - new Date(timestamp).getTime()) / millisecondsToHours / timeScale))
-          );
-        }, 0) ?? 0
-      );
+      const hits = hitHistory[appId] ?? [];
+
+      return hits.reduce((total, timestamp) => {
+        const timestampMs = new Date(timestamp).getTime();
+        if (Number.isNaN(timestampMs)) return total;
+
+        const hitAgeHours = Math.max(0, (now.getTime() - timestampMs) / MILLISECONDS_PER_HOUR);
+        const recencyBoost = Math.exp(-lambdaDecay * (hitAgeHours / timeScale));
+
+        return total + FREQUENCY_HIT_WEIGHT + RECENCY_HIT_WEIGHT * recencyBoost;
+      }, 0);
     };
   }, [hitHistory, lambdaDecay, timeScale]);
 
@@ -162,6 +172,8 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
 
     for (const app of allOpenables) {
       if (!passesSearchFilter(app).passes) continue;
+      if (filterOpenablesBy !== "all" && app.type !== filterOpenablesBy) continue;
+
       const isHidden = preferences.hidden.includes(app.id);
       const isPinned = preferences.pinnedApps.includes(app.id);
 
@@ -178,7 +190,7 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
     hidden.sort(sortFunction);
 
     return { pins, regular, notHidden, hidden };
-  }, [allOpenables, preferences, sortFunction, passesSearchFilter]);
+  }, [allOpenables, preferences, sortFunction, passesSearchFilter, filterOpenablesBy]);
 
   return (
     <ListStateContext.Provider
@@ -199,6 +211,8 @@ export const ListStateProvider = ({ children }: { children: ReactNode }) => {
         notHidden,
         hidden,
         exactMatch,
+        filterOpenablesBy,
+        setFilterOpenablesBy,
       }}
     >
       {children}
